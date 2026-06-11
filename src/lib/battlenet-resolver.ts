@@ -18,7 +18,7 @@ const PRODUCTS: Record<string, BNetGame> = {
   hero: { name: "Heroes of the Storm" },
   s1: { name: "Starcraft Remastered" },
   s2: { name: "Starcraft 2" },
-  pro: { name: "Overwatch 2", steamAppId: 2357570 },
+  pro: { name: "Overwatch", steamAppId: 2357570 },
   w1r: { name: "Warcraft 1: Remastered" },
   w2r: { name: "Warcraft 2: Remastered" },
   w3: { name: "Warcraft 3: Reforged" },
@@ -39,6 +39,16 @@ const PRODUCTS: Record<string, BNetGame> = {
   // Microsoft
   aqua: { name: "Avowed", steamAppId: 2457220 },
   scor: { name: "Sea of Thieves", steamAppId: 1172620 },
+
+  // CDN hostname variants (different from TACT codes but map to same games)
+  ovw: { name: "Overwatch", steamAppId: 2357570 },
+  war3: { name: "Warcraft 3: Reforged" },
+  sc2: { name: "Starcraft 2" },
+  hs: { name: "Hearthstone" },
+
+  // Launcher / infrastructure (not games, but named so they don't show as "Unknown")
+  catalogs: { name: "Battle.net Launcher" },
+  kr: { name: "Battle.net (Korea)" },
 };
 
 /**
