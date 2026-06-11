@@ -45,16 +45,26 @@ function parseTimestamp(raw: string): { timestamp: string; hour: string; day: st
  * Extract a game/content identifier from the request path based on service.
  * Returns null if no identifiable game can be determined.
  */
-export function extractGameId(service: string, requestPath: string): string | null {
+export function extractGameId(service: string, requestPath: string, upstreamHost?: string): string | null {
   switch (service.toLowerCase()) {
     case "steam":
       // Steam: /depot/DEPOT_ID/chunk/... or /depot/DEPOT_ID/manifest/...
       const steamMatch = requestPath.match(/\/depot\/(\d+)\//);
       return steamMatch ? steamMatch[1] : null;
 
+    case "blizzard": {
+      // Battle.net: product from upstream host (cod-assets.cdn.blizzard.com → "cod")
+      // or /tpr/{product}/ path structure
+      if (upstreamHost) {
+        const hostMatch = upstreamHost.match(/^([a-z0-9_]+?)(?:-assets)?\.cdn\.blizzard\.com$/i);
+        if (hostMatch) return hostMatch[1].toLowerCase();
+      }
+      const bnetPathMatch = requestPath.match(/\/tpr\/(\w+)\//);
+      return bnetPathMatch ? bnetPathMatch[1] : null;
+    }
+
     case "epicgames":
-      // Epic: URLs contain app identifiers in some paths like /Builds/Fortnite/... 
-      // or chunk IDs. Try to extract meaningful prefix
+      // Epic: URLs contain app identifiers in some paths like /Builds/Fortnite/...
       const epicMatch = requestPath.match(/\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\//);
       return epicMatch ? `${epicMatch[1]}/${epicMatch[2]}` : null;
 
@@ -62,15 +72,6 @@ export function extractGameId(service: string, requestPath: string): string | nu
       // Riot: often has game name in the domain or path
       const riotMatch = requestPath.match(/\/(valorant|lol|lor|bacon)\b/i);
       return riotMatch ? riotMatch[1].toLowerCase() : "riot-game";
-
-    case "battlenet":
-      // Battle.net: product code in path like /tpr/pro, /tpr/wow, etc.
-      const bnetMatch = requestPath.match(/\/tpr\/(\w+)\//);
-      return bnetMatch ? bnetMatch[1] : null;
-
-    case "uplay":
-      // Ubisoft: sometimes has product GUID or path identifier
-      return null; // Opaque CDN paths
 
     default:
       return null;
@@ -205,7 +206,7 @@ export async function parseLogFile(
         upsertDaily.run(entry.day, entry.service, entry.clientIp, entry.bytesSent, isHit, isMiss, hitBytes, missBytes);
 
         // Track game/content IDs
-        const gameId = extractGameId(entry.service, entry.path);
+        const gameId = extractGameId(entry.service, entry.path, entry.upstreamHost);
         if (gameId) {
           upsertCachedGame.run(
             entry.service, gameId, entry.timestamp, entry.timestamp,

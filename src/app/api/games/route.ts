@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCachedGames, updateGameName } from "@/lib/queries";
 import { resolveDepotBatch, getResolvedDepots } from "@/lib/steam-resolver";
+import { resolveBattleNetGame, getBattleNetImageUrl } from "@/lib/battlenet-resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,18 @@ export async function GET() {
     // Kick off background resolution for the rest (fire-and-forget)
     if (steamDepots.length > 0) {
       void backgroundResolve(steamDepots);
+    }
+
+    // Resolve Battle.net product codes to game names + images (instant, local lookup)
+    for (const game of games) {
+      if (game.service === "blizzard" && !game.gameName) {
+        const name = resolveBattleNetGame(game.gameId);
+        if (name) {
+          game.gameName = name;
+          game.imageUrl = getBattleNetImageUrl(game.gameId) || "";
+          updateGameName("blizzard", game.gameId, name, game.imageUrl || undefined);
+        }
+      }
     }
 
     // Deduplicate: multiple depots for the same game should be merged

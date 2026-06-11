@@ -3,6 +3,7 @@ import path from "path";
 import { parseLine } from "./parser";
 import { getExcludedIps, getGameByDepot } from "./queries";
 import { extractDepotId } from "./steam-resolver";
+import { resolveBattleNetGame, getBattleNetImageUrl } from "./battlenet-resolver";
 
 const LOG_PATH = process.env.LOG_PATH || path.join(process.cwd(), "..", "logs", "access.log");
 
@@ -106,6 +107,14 @@ function ingestLine(line: string) {
       const r = resolveDepot(depotId);
       gameName = r.gameName;
       imageUrl = r.imageUrl;
+    }
+  } else if (entry.service === "blizzard") {
+    const hostMatch = entry.upstreamHost.match(/^([a-z0-9_]+?)(?:-assets)?\.cdn\.blizzard\.com$/i);
+    const productCode = hostMatch ? hostMatch[1] : null;
+    if (productCode) {
+      gameName = resolveBattleNetGame(productCode) || productCode;
+      imageUrl = getBattleNetImageUrl(productCode) || undefined;
+      depotId = productCode;
     }
   }
 

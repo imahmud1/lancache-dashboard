@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock } from "lucide-react";
+import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { ServiceChart } from "@/components/ServiceChart";
 import { BandwidthChart } from "@/components/BandwidthChart";
@@ -121,9 +121,10 @@ export default function Dashboard() {
     });
   };
 
-  const handleIngest = async () => {
+  const handleIngest = async (reprocess = false) => {
     try {
-      const res = await fetch("/api/ingest", { method: "POST", headers: adminHeaders });
+      const url = reprocess ? "/api/ingest?reprocess=1" : "/api/ingest";
+      const res = await fetch(url, { method: "POST", headers: adminHeaders });
       if (res.status === 401) {
         handleLock();
         alert("Admin key required or invalid. Please unlock again.");
@@ -135,7 +136,7 @@ export default function Dashboard() {
     } catch {
       return;
     }
-    setIngest((s) => ({ ...s, running: true, message: "Starting..." }));
+    setIngest((s) => ({ ...s, running: true, message: reprocess ? "Reprocessing..." : "Starting..." }));
 
     const poll = async () => {
       try {
@@ -235,7 +236,16 @@ export default function Dashboard() {
                   <span className="hidden sm:inline">{depot.running ? "Updating…" : "Update Depots"}</span>
                 </button>
                 <button
-                  onClick={handleIngest}
+                  onClick={() => handleIngest(true)}
+                  disabled={ingest.running}
+                  title="Reprocess entire log with latest extraction logic"
+                  className="flex items-center gap-2 px-3.5 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 rounded-xl text-sm font-medium transition-colors border border-gray-700 text-gray-400 hover:text-gray-200"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span className="hidden sm:inline">Reprocess</span>
+                </button>
+                <button
+                  onClick={() => handleIngest(false)}
                   disabled={ingest.running}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-800 disabled:text-gray-500 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-blue-600/20 disabled:shadow-none"
                 >

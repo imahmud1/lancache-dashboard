@@ -79,7 +79,7 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 
 5. Open `http://your-server-ip:3000`
 
-Your `docker-compose.yml` is gitignored, so any credentials you put in it stay local. On first launch the dashboard ingests your `access.log` and downloads the Steam depot mapping in the background (see [Steam game identification](#steam-game-identification)).
+Your `docker-compose.yml` is gitignored, so any credentials you put in it stay local. On first launch the dashboard ingests your `access.log` and downloads the Steam depot mapping in the background (see [Game identification](#game-identification)).
 
 ---
 
@@ -154,13 +154,15 @@ Because only aggregates are stored, a multi-hundred-GB log history collapses int
 
 ---
 
-## Steam game identification
+## Game identification
 
 The access log only contains Steam **depot IDs** (e.g. `/depot/2347771/chunk/...`), not game names. Mapping a depot to its game accurately requires Steam's PICS data, which normally needs an authenticated Steam session.
 
 Instead of logging in, this dashboard uses a **pre-built depot → app mapping** published by the [lancache-manager](https://github.com/regix1/lancache-manager) project. On first run it downloads [`pics_depot_mappings.json`](https://github.com/regix1/lancache-pics) (~100MB, ~244k mappings, refreshed daily) and caches it locally. Depot resolution is then an instant, accurate local lookup — game names and cover images included. For depots not yet in the snapshot (brand-new releases), it falls back to the public Steam store API.
 
-**Other services (Epic, Battle.net, Riot, etc.) cannot be resolved to game names.** Their CDN URLs are opaque hashes with no public mapping, so they're shown at the service level only. This is a fundamental limitation of the log data, not the dashboard.
+**Battle.net** games are resolved using TACT product codes embedded in CDN hostnames (e.g. `cod-assets.cdn.blizzard.com` → Call of Duty). The product list is based on [tpill90/battlenet-lancache-prefill](https://github.com/tpill90/battlenet-lancache-prefill).
+
+**Other services (Epic, Riot, etc.)** cannot currently be resolved to game names — their CDN URLs are opaque hashes with no known public mapping. They're shown at the service level only.
 
 ---
 
@@ -225,9 +227,11 @@ WantedBy=multi-user.target
 ## Credits & Acknowledgements
 
 - **[LanCache.NET](https://lancache.net/)** — the caching system this dashboard monitors.
-- **[regix1/lancache-manager](https://github.com/regix1/lancache-manager)** and **[regix1/lancache-pics](https://github.com/regix1/lancache-pics)** — for the pre-built Steam depot → app mapping (`pics_depot_mappings.json`) that powers game identification. This dashboard would not be able to name Steam games without it. The lancache-manager project is MIT licensed.
+- **[regix1/lancache-manager](https://github.com/regix1/lancache-manager)** and **[regix1/lancache-pics](https://github.com/regix1/lancache-pics)** — for the pre-built Steam depot → app mapping that powers Steam game identification. The lancache-manager project is MIT licensed.
+- **[tpill90/battlenet-lancache-prefill](https://github.com/tpill90/battlenet-lancache-prefill)** — for the Battle.net TACT product code reference used to resolve Blizzard/Activision game names from CDN hostnames.
 - **[DeveLanCacheUI](https://github.com/devedse/DeveLanCacheUI_Backend)** — prior art and inspiration for log-based LanCache monitoring.
-- **Steam Store Web API** — for resolving the occasional depot not yet in the PICS snapshot, and for cover art hosted on Steam's CDN.
+- **[uklans/cache-domains](https://github.com/uklans/cache-domains)** — the canonical list of cacheable CDN domains that LanCache routes, used as the service registry reference.
+- **Steam Store Web API** — for resolving depots not yet in the PICS snapshot, and for header art.
 
 Game names, cover images, and related metadata are property of their respective owners and are used here for identification purposes only.
 
