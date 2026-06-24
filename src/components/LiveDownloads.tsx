@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Activity, Gauge } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
-import { formatBytes, getServiceLabel, getServiceColor, formatDuration } from "@/lib/format";
+import { formatBytes, formatBits, getServiceLabel, getServiceColor, formatDuration } from "@/lib/format";
 
 interface LiveDownload {
   key: string;
@@ -20,11 +20,23 @@ interface LiveDownload {
   speedBps: number;
 }
 
+type SpeedUnit = "bytes" | "bits";
+
+// Splits a rate into a bold value and a smaller suffix for consistent styling.
+function formatRate(bytesPerSec: number, unit: SpeedUnit): { value: string; suffix: string } {
+  if (unit === "bits") {
+    const [value, u] = formatBits(bytesPerSec).split(" ");
+    return { value, suffix: ` ${u}` };
+  }
+  return { value: formatBytes(bytesPerSec), suffix: "/s" };
+}
+
 export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) {
   const [connected, setConnected] = useState(false);
   const [downloads, setDownloads] = useState<LiveDownload[]>([]);
   const [totalBps, setTotalBps] = useState(0);
   const [peakBps, setPeakBps] = useState(0);
+  const [unit, setUnit] = useState<SpeedUnit>("bytes");
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -62,6 +74,25 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
       <SectionHeader icon={Activity} title="Live Downloads" subtitle="Real-time activity across all services" accent="green">
+        {/* Unit toggle */}
+        <div className="flex items-center gap-1 p-1 bg-gray-950/50 border border-gray-700/60 rounded-lg">
+          <button
+            onClick={() => setUnit("bits")}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+              unit === "bits" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            bit/s
+          </button>
+          <button
+            onClick={() => setUnit("bytes")}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+              unit === "bytes" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            byte/s
+          </button>
+        </div>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
           connected ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"
         }`}>
@@ -76,11 +107,11 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
           <div className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase tracking-wide mb-1">
             <Gauge className="w-3 h-3" /> Current
           </div>
-          <div className="text-lg font-bold text-blue-400">{formatBytes(totalBps)}<span className="text-xs text-gray-500">/s</span></div>
+          <div className="text-lg font-bold text-blue-400">{formatRate(totalBps, unit).value}<span className="text-xs text-gray-500">{formatRate(totalBps, unit).suffix}</span></div>
         </div>
         <div className="rounded-xl bg-gray-950/50 border border-gray-800 p-3">
           <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Peak</div>
-          <div className="text-lg font-bold text-purple-400">{formatBytes(peakBps)}<span className="text-xs text-gray-500">/s</span></div>
+          <div className="text-lg font-bold text-purple-400">{formatRate(peakBps, unit).value}<span className="text-xs text-gray-500">{formatRate(peakBps, unit).suffix}</span></div>
         </div>
         <div className="rounded-xl bg-gray-950/50 border border-gray-800 p-3">
           <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">Active</div>
@@ -99,7 +130,7 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
           {downloads.map((d) => (
-            <DownloadRow key={d.key} d={d} maxBps={downloads[0]?.speedBps || 1} />
+            <DownloadRow key={d.key} d={d} maxBps={downloads[0]?.speedBps || 1} unit={unit} />
           ))}
         </div>
       )}
@@ -107,7 +138,7 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
   );
 }
 
-function DownloadRow({ d, maxBps }: { d: LiveDownload; maxBps: number }) {
+function DownloadRow({ d, maxBps, unit }: { d: LiveDownload; maxBps: number; unit: SpeedUnit }) {
   const dotColor = getServiceColor(d.service);
   const speedPct = (d.speedBps / maxBps) * 100;
   const title = d.gameName || (d.service === "steam" && d.depotId ? `Steam depot ${d.depotId}` : getServiceLabel(d.service));
@@ -147,7 +178,7 @@ function DownloadRow({ d, maxBps }: { d: LiveDownload; maxBps: number }) {
 
         {/* Speed */}
         <div className="text-right shrink-0">
-          <div className="text-sm font-bold text-blue-400 font-mono">{formatBytes(d.speedBps)}/s</div>
+          <div className="text-sm font-bold text-blue-400 font-mono">{formatRate(d.speedBps, unit).value}<span className="text-gray-500">{formatRate(d.speedBps, unit).suffix}</span></div>
         </div>
       </div>
     </div>

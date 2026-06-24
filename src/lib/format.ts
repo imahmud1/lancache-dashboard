@@ -7,6 +7,17 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(i > 2 ? 2 : 0)} ${units[i]}`;
 }
 
+// Reports a byte/sec rate in bits/sec, using a 1024 base to mirror formatBytes.
+export function formatBits(bytesPerSec: number): string {
+  const bits = bytesPerSec * 8;
+  if (bits === 0) return "0 bps";
+  const units = ["bps", "Kbps", "Mbps", "Gbps", "Tbps", "Pbps"];
+  const k = 1024;
+  const i = Math.min(Math.floor(Math.log(bits) / Math.log(k)), units.length - 1);
+  const value = bits / Math.pow(k, i);
+  return `${value.toFixed(i > 2 ? 2 : 0)} ${units[i]}`;
+}
+
 export function formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
