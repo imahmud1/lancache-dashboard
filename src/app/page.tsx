@@ -11,7 +11,9 @@ import { RecentActivity } from "@/components/RecentActivity";
 import { LiveDownloads } from "@/components/LiveDownloads";
 import { CachedGames } from "@/components/CachedGames";
 import { CacheSavings } from "@/components/CacheSavings";
+import { RangePanel } from "@/components/RangePanel";
 import { formatBytes, formatNumber } from "@/lib/format";
+import { RangeSelection, ALL_TIME, resolveSelection } from "@/lib/range";
 
 interface DashboardData {
   overview: {
@@ -25,8 +27,8 @@ interface DashboardData {
     totalServices: number;
   };
   services: { service: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
-  dailyBandwidth: { day: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
-  hourlyToday: { hour: string; bytesSent: number }[];
+  bandwidth: { bucket: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
+  bandwidthGranularity: "hour" | "day";
 }
 
 export default function Dashboard() {
@@ -44,6 +46,7 @@ export default function Dashboard() {
     running: false, percent: 0, phase: "idle", message: "", speedBps: 0,
   });
   const [includeAll, setIncludeAll] = useState(false);
+  const [selection, setSelection] = useState<RangeSelection>(ALL_TIME);
   const [authRequired, setAuthRequired] = useState(false);
   const [adminKey, setAdminKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,9 +61,18 @@ export default function Dashboard() {
   useEffect(() => {
     const savedToggle = typeof window !== "undefined" ? localStorage.getItem("includeAll") : null;
     const savedKey = typeof window !== "undefined" ? localStorage.getItem("adminKey") : null;
+    const savedRange = typeof window !== "undefined" ? localStorage.getItem("rangeSelection") : null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedToggle === "1") setIncludeAll(true);
     if (savedKey) setAdminKey(savedKey);
+    if (savedRange) {
+      try {
+        const parsed = JSON.parse(savedRange) as RangeSelection;
+        if (parsed && typeof parsed.kind === "string") setSelection(parsed);
+      } catch {
+        /* ignore malformed persisted selection */
+      }
+    }
     fetch("/api/auth")
       .then((r) => r.json())
       .then((d) => setAuthRequired(!!d.authRequired))
@@ -104,7 +116,14 @@ export default function Dashboard() {
 
   const fetchData = useCallback(async () => {
     try {
-      const q = includeAll ? "?includeAll=1" : "";
+      const params = new URLSearchParams();
+      if (includeAll) params.set("includeAll", "1");
+      const resolved = resolveSelection(selection);
+      if (resolved) {
+        params.set("start", resolved.start);
+        params.set("end", resolved.end);
+      }
+      const q = params.toString() ? `?${params.toString()}` : "";
       const [statsRes, clientsRes, recentRes] = await Promise.all([
         fetch(`/api/stats${q}`),
         fetch(`/api/clients${q}`),
@@ -122,7 +141,12 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [includeAll]);
+  }, [includeAll, selection]);
+
+  const handleSelectRange = (sel: RangeSelection) => {
+    setSelection(sel);
+    if (typeof window !== "undefined") localStorage.setItem("rangeSelection", JSON.stringify(sel));
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -379,6 +403,15 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Time range selector */}
+        <RangePanel
+          selection={selection}
+          onSelect={handleSelectRange}
+          canAdmin={canAdmin}
+          adminHeaders={adminHeaders}
+          onAdminRejected={handleLock}
+        />
+
         {/* Cache savings hero */}
         <CacheSavings
           servedFromCache={data?.overview.servedFromCache || 0}
@@ -425,7 +458,7 @@ export default function Dashboard() {
         <LiveDownloads includeAll={includeAll} />
 
         {/* Bandwidth chart - full width */}
-        <BandwidthChart data={data?.dailyBandwidth || []} />
+        <BandwidthChart data={data?.bandwidth || []} granularity={data?.bandwidthGranularity || "day"} />
 
         {/* Services - own full-width section */}
         <ServiceChart data={data?.services || []} />

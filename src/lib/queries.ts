@@ -1,4 +1,7 @@
 import { getDb } from "./db";
+import type { SavedRange } from "./range";
+
+export type { SavedRange };
 
 /**
  * IPs/prefixes to exclude from stats by default (prefill traffic from the
@@ -33,8 +36,62 @@ function ipExclusion(column: string, includeAll: boolean): { clause: string; par
   return { clause: conds.join(" AND "), params };
 }
 
+/**
+ * An inclusive-start, exclusive-end window over hour buckets, expressed in
+ * log-local wall-clock (see ADR-0001). Both bounds are hour strings: "2026-07-01T18".
+ */
+export interface TimeRange {
+  start: string;
+  end: string;
+}
+
+const HOUR_RE = /^\d{4}-\d{2}-\d{2}T\d{2}$/;
+
+/** Build a TimeRange from raw query params, or null if absent/malformed/empty. */
+export function parseTimeRange(start: string | null, end: string | null): TimeRange | null {
+  if (!start || !end) return null;
+  if (!HOUR_RE.test(start) || !HOUR_RE.test(end)) return null;
+  if (end <= start) return null; // lexical compare is valid for fixed-width hour strings
+  return { start, end };
+}
+
+/** Chart bucketing rule: ranges spanning ≤ 2 days show hourly bars, longer ranges daily. */
+export function chooseGranularity(range: TimeRange): "hour" | "day" {
+  const spanHours = (Date.parse(`${range.end}:00:00Z`) - Date.parse(`${range.start}:00:00Z`)) / 3_600_000;
+  return spanHours <= 48 ? "hour" : "day";
+}
+
 export interface QueryOpts {
   includeAll?: boolean; // when true, do not exclude prefill/local IPs
+  range?: TimeRange | null; // when set, restrict to this hour window (uses hourly_stats)
+}
+
+/**
+ * Pick the rollup table and time-filter for a query. A bounded range uses
+ * hourly_stats (finest retained granularity); all-time uses daily_stats (as before).
+ */
+function statsSource(range?: TimeRange | null): { table: string; timeClause: string; timeParams: string[] } {
+  if (range) {
+    return { table: "hourly_stats", timeClause: "hour >= ? AND hour < ?", timeParams: [range.start, range.end] };
+  }
+  return { table: "daily_stats", timeClause: "", timeParams: [] };
+}
+
+/** Combine the IP exclusion and time-range filters into a single WHERE for a rollup table. */
+function buildFilter(opts: QueryOpts): { table: string; where: string; params: string[] } {
+  const src = statsSource(opts.range);
+  const ipf = ipExclusion("client_ip", !!opts.includeAll);
+  const conds: string[] = [];
+  const params: string[] = [];
+  if (src.timeClause) {
+    conds.push(src.timeClause);
+    params.push(...src.timeParams);
+  }
+  if (ipf) {
+    conds.push(ipf.clause);
+    params.push(...ipf.params);
+  }
+  return { table: src.table, where: conds.length ? `WHERE ${conds.join(" AND ")}` : "", params };
 }
 
 export interface OverviewStats {
@@ -92,23 +149,21 @@ export interface RecentEntry {
 
 export function getOverviewStats(opts: QueryOpts = {}): OverviewStats {
   const db = getDb();
-  const filter = ipExclusion("client_ip", !!opts.includeAll);
-  const where = filter ? `WHERE ${filter.clause}` : "";
-  const params = filter ? filter.params : [];
+  const { table, where, params } = buildFilter(opts);
 
   const totals = db.prepare(`
-    SELECT 
+    SELECT
       COALESCE(SUM(requests), 0) as totalRequests,
       COALESCE(SUM(bytes_sent), 0) as totalBytesSent,
       COALESCE(SUM(cache_hits), 0) as totalHits,
       COALESCE(SUM(cache_misses), 0) as totalMisses,
       COALESCE(SUM(hit_bytes), 0) as hitBytes,
       COALESCE(SUM(miss_bytes), 0) as missBytes
-    FROM daily_stats ${where}
+    FROM ${table} ${where}
   `).get(...params) as { totalRequests: number; totalBytesSent: number; totalHits: number; totalMisses: number; hitBytes: number; missBytes: number };
 
-  const clientCount = db.prepare(`SELECT COUNT(DISTINCT client_ip) as count FROM daily_stats ${where}`).get(...params) as { count: number };
-  const serviceCount = db.prepare(`SELECT COUNT(DISTINCT service) as count FROM daily_stats ${where}`).get(...params) as { count: number };
+  const clientCount = db.prepare(`SELECT COUNT(DISTINCT client_ip) as count FROM ${table} ${where}`).get(...params) as { count: number };
+  const serviceCount = db.prepare(`SELECT COUNT(DISTINCT service) as count FROM ${table} ${where}`).get(...params) as { count: number };
 
   const totalHitMiss = totals.totalHits + totals.totalMisses;
   const cacheHitRateByReq = totalHitMiss > 0 ? (totals.totalHits / totalHitMiss) * 100 : 0;
@@ -130,11 +185,9 @@ export function getOverviewStats(opts: QueryOpts = {}): OverviewStats {
 
 export function getServiceStats(limit = 20, opts: QueryOpts = {}): ServiceStats[] {
   const db = getDb();
-  const filter = ipExclusion("client_ip", !!opts.includeAll);
-  const where = filter ? `WHERE ${filter.clause}` : "";
-  const params = filter ? filter.params : [];
+  const { table, where, params } = buildFilter(opts);
   return db.prepare(`
-    SELECT 
+    SELECT
       service,
       SUM(requests) as requests,
       SUM(bytes_sent) as bytesSent,
@@ -142,7 +195,7 @@ export function getServiceStats(limit = 20, opts: QueryOpts = {}): ServiceStats[
       SUM(cache_misses) as cacheMisses,
       SUM(hit_bytes) as hitBytes,
       SUM(miss_bytes) as missBytes
-    FROM daily_stats ${where}
+    FROM ${table} ${where}
     GROUP BY service
     ORDER BY bytesSent DESC
     LIMIT ?
@@ -151,11 +204,9 @@ export function getServiceStats(limit = 20, opts: QueryOpts = {}): ServiceStats[
 
 export function getClientStats(limit = 50, opts: QueryOpts = {}): ClientStats[] {
   const db = getDb();
-  const filter = ipExclusion("client_ip", !!opts.includeAll);
-  const where = filter ? `WHERE ${filter.clause}` : "";
-  const params = filter ? filter.params : [];
+  const { table, where, params } = buildFilter(opts);
   const clients = db.prepare(`
-    SELECT 
+    SELECT
       client_ip as clientIp,
       SUM(requests) as requests,
       SUM(bytes_sent) as bytesSent,
@@ -163,22 +214,25 @@ export function getClientStats(limit = 50, opts: QueryOpts = {}): ClientStats[] 
       SUM(cache_misses) as cacheMisses,
       SUM(hit_bytes) as hitBytes,
       SUM(miss_bytes) as missBytes
-    FROM daily_stats ${where}
+    FROM ${table} ${where}
     GROUP BY client_ip
     ORDER BY bytesSent DESC
     LIMIT ?
   `).all(...params, limit) as ClientStats[];
 
-  // Get top service per client
+  // Top service per client, honoring the same table + time window.
+  const src = statsSource(opts.range);
+  const svcTimeClause = src.timeClause ? ` AND ${src.timeClause}` : "";
+  const topServiceStmt = db.prepare(`
+    SELECT service, SUM(bytes_sent) as total
+    FROM ${src.table}
+    WHERE client_ip = ?${svcTimeClause}
+    GROUP BY service
+    ORDER BY total DESC
+    LIMIT 1
+  `);
   for (const client of clients) {
-    const topService = db.prepare(`
-      SELECT service, SUM(bytes_sent) as total
-      FROM daily_stats
-      WHERE client_ip = ?
-      GROUP BY service
-      ORDER BY total DESC
-      LIMIT 1
-    `).get(client.clientIp) as { service: string; total: number } | undefined;
+    const topService = topServiceStmt.get(client.clientIp, ...src.timeParams) as { service: string; total: number } | undefined;
     client.topService = topService?.service || "unknown";
   }
 
@@ -191,7 +245,7 @@ export function getDailyBandwidth(days = 30, opts: QueryOpts = {}): DailyBandwid
   const where = filter ? `WHERE ${filter.clause}` : "";
   const params = filter ? filter.params : [];
   return db.prepare(`
-    SELECT 
+    SELECT
       day,
       SUM(bytes_sent) as bytesSent,
       SUM(requests) as requests,
@@ -206,13 +260,72 @@ export function getDailyBandwidth(days = 30, opts: QueryOpts = {}): DailyBandwid
   `).all(...params, days).reverse() as DailyBandwidth[];
 }
 
+export interface BandwidthPoint {
+  bucket: string; // "2026-07-01" (day) or "2026-07-01T18" (hour)
+  bytesSent: number;
+  requests: number;
+  cacheHits: number;
+  cacheMisses: number;
+  hitBytes: number;
+  missBytes: number;
+}
+
+/**
+ * Bandwidth time series for the chart. With no range, returns the last 30 days
+ * from daily_stats (legacy behaviour). With a range, buckets hourly_stats by
+ * hour or day so the exact window boundaries are respected.
+ */
+export function getBandwidthSeries(opts: QueryOpts = {}): { granularity: "hour" | "day"; points: BandwidthPoint[] } {
+  if (!opts.range) {
+    const points = getDailyBandwidth(30, opts).map((d) => ({ ...d, bucket: d.day }));
+    return { granularity: "day", points };
+  }
+
+  const db = getDb();
+  const granularity = chooseGranularity(opts.range);
+  const ipf = ipExclusion("client_ip", !!opts.includeAll);
+  const conds = ["hour >= ? AND hour < ?"];
+  const params: string[] = [opts.range.start, opts.range.end];
+  if (ipf) {
+    conds.push(ipf.clause);
+    params.push(...ipf.params);
+  }
+  const bucketExpr = granularity === "hour" ? "hour" : "substr(hour, 1, 10)";
+  const points = db.prepare(`
+    SELECT
+      ${bucketExpr} as bucket,
+      SUM(bytes_sent) as bytesSent,
+      SUM(requests) as requests,
+      SUM(cache_hits) as cacheHits,
+      SUM(cache_misses) as cacheMisses,
+      SUM(hit_bytes) as hitBytes,
+      SUM(miss_bytes) as missBytes
+    FROM hourly_stats
+    WHERE ${conds.join(" AND ")}
+    GROUP BY bucket
+    ORDER BY bucket
+  `).all(...params) as BandwidthPoint[];
+  return { granularity, points };
+}
+
 export function getRecentActivity(limit = 100, opts: QueryOpts = {}): RecentEntry[] {
   const db = getDb();
-  const filter = ipExclusion("client_ip", !!opts.includeAll);
-  const where = filter ? `WHERE ${filter.clause}` : "";
-  const params = filter ? filter.params : [];
+  const ipf = ipExclusion("client_ip", !!opts.includeAll);
+  const conds: string[] = [];
+  const params: string[] = [];
+  // recent_activity keys off full timestamps ("2026-07-01T18:49:34"); comparing
+  // against hour-string bounds works lexically since the hour is a prefix.
+  if (opts.range) {
+    conds.push("timestamp >= ? AND timestamp < ?");
+    params.push(opts.range.start, opts.range.end);
+  }
+  if (ipf) {
+    conds.push(ipf.clause);
+    params.push(...ipf.params);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   return db.prepare(`
-    SELECT 
+    SELECT
       id,
       timestamp,
       service,
@@ -227,18 +340,25 @@ export function getRecentActivity(limit = 100, opts: QueryOpts = {}): RecentEntr
   `).all(...params, limit) as RecentEntry[];
 }
 
-export function getHourlyBandwidthToday(): { hour: string; bytesSent: number }[] {
+export function listSavedRanges(): SavedRange[] {
   const db = getDb();
-  const today = new Date().toISOString().slice(0, 10);
-  return db.prepare(`
-    SELECT 
-      hour,
-      SUM(bytes_sent) as bytesSent
-    FROM hourly_stats
-    WHERE hour LIKE ?
-    GROUP BY hour
-    ORDER BY hour
-  `).all(`${today}%`) as { hour: string; bytesSent: number }[];
+  return db.prepare(
+    `SELECT id, name, start, end, created_at as createdAt FROM saved_ranges ORDER BY start DESC, id DESC`
+  ).all() as SavedRange[];
+}
+
+export function createSavedRange(name: string, start: string, end: string): SavedRange {
+  const db = getDb();
+  const createdAt = new Date().toISOString();
+  const info = db.prepare(
+    `INSERT INTO saved_ranges (name, start, end, created_at) VALUES (?, ?, ?, ?)`
+  ).run(name, start, end, createdAt);
+  return { id: Number(info.lastInsertRowid), name, start, end, createdAt };
+}
+
+export function deleteSavedRange(id: number): boolean {
+  const db = getDb();
+  return db.prepare(`DELETE FROM saved_ranges WHERE id = ?`).run(id).changes > 0;
 }
 
 /** Cache retention window (days) used to estimate whether content is "likely still cached". */
