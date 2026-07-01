@@ -1,6 +1,6 @@
 services:
   lancache-dashboard:
-    build: .
+    image: ghcr.io/mathewburnett/lancache-dashboard:latest
     container_name: lancache-dashboard
     restart: unless-stopped
     ports:

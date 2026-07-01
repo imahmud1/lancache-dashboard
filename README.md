@@ -75,11 +75,13 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
    mkdir -p data && sudo chown -R 1001:1001 data
    ```
 
-4. Start it:
+4. Start it (pulls the prebuilt image from GHCR):
 
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    ```
+
+   To grab a newer release later, run `docker compose pull && docker compose up -d`.
 
 5. Open `http://your-server-ip:3000`
 
