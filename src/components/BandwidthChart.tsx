@@ -12,9 +12,10 @@ interface BandwidthDatum {
   missBytes: number;
 }
 
-export function BandwidthChart({ data, granularity = "day" }: { data: BandwidthDatum[]; granularity?: "hour" | "day" }) {
+export function BandwidthChart({ data, granularity = "day" }: { data: BandwidthDatum[]; granularity?: "hour" | "3h" | "day" }) {
+  const hourly = granularity === "hour" || granularity === "3h";
   const chartData = data.map((d) => ({
-    label: granularity === "hour" ? `${d.bucket.slice(11)}:00` : d.bucket.slice(5),
+    label: hourly ? `${d.bucket.slice(11)}:00` : d.bucket.slice(5),
     fromCache: d.hitBytes,
     fromUpstream: d.missBytes,
     total: d.bytesSent,
@@ -28,7 +29,7 @@ export function BandwidthChart({ data, granularity = "day" }: { data: BandwidthD
       <SectionHeader
         icon={TrendingUp}
         title="Bandwidth"
-        subtitle={granularity === "hour" ? "Hourly · cache vs internet" : "Daily · cache vs internet"}
+        subtitle={granularity === "hour" ? "Hourly · cache vs internet" : granularity === "3h" ? "Every 3h · cache vs internet" : "Daily · cache vs internet"}
         accent="blue"
       >
         <div className="flex items-center gap-3">

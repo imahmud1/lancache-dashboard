@@ -28,7 +28,7 @@ interface DashboardData {
   };
   services: { service: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
   bandwidth: { bucket: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
-  bandwidthGranularity: "hour" | "day";
+  bandwidthGranularity: "hour" | "3h" | "day";
 }
 
 export default function Dashboard() {

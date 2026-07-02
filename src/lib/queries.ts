@@ -55,10 +55,15 @@ export function parseTimeRange(start: string | null, end: string | null): TimeRa
   return { start, end };
 }
 
-/** Chart bucketing rule: ranges spanning ≤ 2 days show hourly bars, longer ranges daily. */
-export function chooseGranularity(range: TimeRange): "hour" | "day" {
+/**
+ * Chart bucketing rule: ≤ 2 days shows hourly bars, up to 10 days shows one bar
+ * per 3 hours, longer ranges daily.
+ */
+export function chooseGranularity(range: TimeRange): "hour" | "3h" | "day" {
   const spanHours = (Date.parse(`${range.end}:00:00Z`) - Date.parse(`${range.start}:00:00Z`)) / 3_600_000;
-  return spanHours <= 48 ? "hour" : "day";
+  if (spanHours <= 48) return "hour";
+  if (spanHours <= 240) return "3h";
+  return "day";
 }
 
 export interface QueryOpts {
@@ -275,7 +280,7 @@ export interface BandwidthPoint {
  * from daily_stats (legacy behaviour). With a range, buckets hourly_stats by
  * hour or day so the exact window boundaries are respected.
  */
-export function getBandwidthSeries(opts: QueryOpts = {}): { granularity: "hour" | "day"; points: BandwidthPoint[] } {
+export function getBandwidthSeries(opts: QueryOpts = {}): { granularity: "hour" | "3h" | "day"; points: BandwidthPoint[] } {
   if (!opts.range) {
     const points = getDailyBandwidth(30, opts).map((d) => ({ ...d, bucket: d.day }));
     return { granularity: "day", points };
@@ -290,7 +295,14 @@ export function getBandwidthSeries(opts: QueryOpts = {}): { granularity: "hour" 
     conds.push(ipf.clause);
     params.push(...ipf.params);
   }
-  const bucketExpr = granularity === "hour" ? "hour" : "substr(hour, 1, 10)";
+  // 3h buckets: keep the date + "T", floor the hour to a multiple of 3, and
+  // re-pad to two digits so the bucket string matches the hourly format ("...T18").
+  const bucketExpr =
+    granularity === "hour"
+      ? "hour"
+      : granularity === "3h"
+        ? "substr(hour, 1, 11) || printf('%02d', (CAST(substr(hour, 12, 2) AS INTEGER) / 3) * 3)"
+        : "substr(hour, 1, 10)";
   const points = db.prepare(`
     SELECT
       ${bucketExpr} as bucket,
