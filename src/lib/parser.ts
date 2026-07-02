@@ -28,16 +28,32 @@ const MONTH_MAP: Record<string, string> = {
 };
 
 function parseTimestamp(raw: string): { timestamp: string; hour: string; day: string } {
-  // Format: 09/Jun/2026:00:49:34 +0600
-  const match = raw.match(/(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2})/);
+  // Format: 09/Jun/2026:00:49:34 +0600 (the trailing offset is optional; assumed UTC if absent)
+  const match = raw.match(/(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2})(?:\s+([+-])(\d{2})(\d{2}))?/);
   if (!match) {
     return { timestamp: raw, hour: "unknown", day: "unknown" };
   }
-  const [, dd, mon, yyyy, hh, mm, ss] = match;
+  const [, dd, mon, yyyy, hh, mm, ss, sign, offH, offM] = match;
   const month = MONTH_MAP[mon] || "01";
-  const timestamp = `${yyyy}-${month}-${dd}T${hh}:${mm}:${ss}`;
-  const hour = `${yyyy}-${month}-${dd}T${hh}`;
-  const day = `${yyyy}-${month}-${dd}`;
+
+  // Treat the wall-clock components as an epoch, then shift by the log line's own
+  // UTC offset so every bucket is keyed in UTC (see ADR-0002). e.g. "+0600" means
+  // local = UTC+6, so we subtract 6h to reach UTC.
+  let ms = Date.UTC(Number(yyyy), Number(month) - 1, Number(dd), Number(hh), Number(mm), Number(ss));
+  if (sign) {
+    const offsetMin = (sign === "-" ? -1 : 1) * (Number(offH) * 60 + Number(offM));
+    ms -= offsetMin * 60_000;
+  }
+
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  const Y = d.getUTCFullYear();
+  const Mo = p(d.getUTCMonth() + 1);
+  const Da = p(d.getUTCDate());
+  const H = p(d.getUTCHours());
+  const timestamp = `${Y}-${Mo}-${Da}T${H}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+  const hour = `${Y}-${Mo}-${Da}T${H}`;
+  const day = `${Y}-${Mo}-${Da}`;
   return { timestamp, hour, day };
 }
 

@@ -29,7 +29,7 @@ export function BandwidthChart({ data, granularity = "day" }: { data: BandwidthD
       <SectionHeader
         icon={TrendingUp}
         title="Bandwidth"
-        subtitle={granularity === "hour" ? "Hourly · cache vs internet" : granularity === "3h" ? "Every 3h · cache vs internet" : "Daily · cache vs internet"}
+        subtitle={granularity === "hour" ? "Hourly (UTC) · cache vs internet" : granularity === "3h" ? "Every 3h (UTC) · cache vs internet" : "Daily (UTC) · cache vs internet"}
         accent="blue"
       >
         <div className="flex items-center gap-3">

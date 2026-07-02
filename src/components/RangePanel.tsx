@@ -167,7 +167,7 @@ export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdmi
           {/* Custom absolute range */}
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1">
-              <span className="text-[11px] text-gray-500">From</span>
+              <span className="text-[11px] text-gray-500">From (UTC)</span>
               <input
                 type="datetime-local"
                 value={customStart}
@@ -176,7 +176,7 @@ export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdmi
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-[11px] text-gray-500">To</span>
+              <span className="text-[11px] text-gray-500">To (UTC)</span>
               <input
                 type="datetime-local"
                 value={customEnd}
@@ -194,7 +194,7 @@ export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdmi
             >
               Apply
             </button>
-            <span className="text-[11px] text-gray-600">Snaps to the hour.</span>
+            <span className="text-[11px] text-gray-600">Snaps to the hour. Times are UTC.</span>
           </div>
 
           {error && <p className="text-[11px] text-red-400">{error}</p>}

@@ -1,5 +1,11 @@
 # Hour-granular, naive-local time filtering over rollup tables
 
+> **Status: Superseded by [ADR-0002](0002-utc-time-bucketing.md).** The naive
+> log-local approach caused dashboard totals to diverge from UTC-based log
+> systems (e.g. Elasticsearch) whenever the viewer's clock differed from the log
+> offset. Buckets are now keyed in UTC. The hour-granular, rollup-table
+> mechanics below still apply; only the timezone basis changed.
+
 ## Context
 
 The dashboard aggregates the LanCache `access.log` into `daily_stats` and `hourly_stats` rollup tables (keyed by service + client_ip), retained indefinitely; only the last 1000 raw log lines survive in `recent_activity`. We wanted a viewer-selectable date/time Range (including LAN-event windows and relative windows like "last 12h").
