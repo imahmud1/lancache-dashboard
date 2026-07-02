@@ -66,6 +66,13 @@ export function chooseGranularity(range: TimeRange): "hour" | "3h" | "day" {
   return "day";
 }
 
+/** The next hour string after `h` ("2026-07-01T23" → "2026-07-02T00"), in log-local wall-clock. */
+function nextHour(h: string): string {
+  const d = new Date(Date.parse(`${h}:00:00Z`) + 3_600_000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}`;
+}
+
 export interface QueryOpts {
   includeAll?: boolean; // when true, do not exclude prefill/local IPs
   range?: TimeRange | null; // when set, restrict to this hour window (uses hourly_stats)
@@ -287,7 +294,6 @@ export function getBandwidthSeries(opts: QueryOpts = {}): { granularity: "hour" 
   }
 
   const db = getDb();
-  const granularity = chooseGranularity(opts.range);
   const ipf = ipExclusion("client_ip", !!opts.includeAll);
   const conds = ["hour >= ? AND hour < ?"];
   const params: string[] = [opts.range.start, opts.range.end];
@@ -295,6 +301,16 @@ export function getBandwidthSeries(opts: QueryOpts = {}): { granularity: "hour" 
     conds.push(ipf.clause);
     params.push(...ipf.params);
   }
+
+  // Pick resolution from the span the data actually occupies within the range,
+  // not the requested window: a wide selection over a small slice of data still
+  // gets fine bars. (hour is fixed-width, so MIN/MAX are chronological.)
+  const bounds = db
+    .prepare(`SELECT MIN(hour) as lo, MAX(hour) as hi FROM hourly_stats WHERE ${conds.join(" AND ")}`)
+    .get(...params) as { lo: string | null; hi: string | null };
+  const dataRange: TimeRange =
+    bounds.lo && bounds.hi ? { start: bounds.lo, end: nextHour(bounds.hi) } : opts.range;
+  const granularity = chooseGranularity(dataRange);
   // 3h buckets: keep the date + "T", floor the hour to a multiple of 3, and
   // re-pad to two digits so the bucket string matches the hourly format ("...T18").
   const bucketExpr =
