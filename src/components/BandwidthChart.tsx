@@ -35,8 +35,8 @@ export function BandwidthChart({ data }: { data: DailyData[] }) {
         </div>
       </SectionHeader>
 
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-64 min-h-[1px]">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 8, bottom: 5 }}>
             <defs>
               <linearGradient id="cacheGrad" x1="0" y1="0" x2="0" y2="1">

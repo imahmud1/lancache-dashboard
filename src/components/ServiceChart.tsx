@@ -139,7 +139,7 @@ function ChartView({
   return (
     <div className="flex flex-col md:flex-row items-center gap-6">
       <div className="relative w-44 h-44 shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
           <PieChart>
             <Pie data={services} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="bytesSent" nameKey="service" stroke="none" paddingAngle={2}>
               {services.map((entry, index) => (
