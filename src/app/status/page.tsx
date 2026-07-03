@@ -288,7 +288,7 @@ export default function StatusPage() {
     const L: string[] = [];
     L.push(`LanCache Status Check — ${new Date().toLocaleString()}`);
     L.push(`Serving host: ${origin || "unknown"} (${isHttps ? "https" : "http"})`);
-    if (cacheIp) L.push(`Server DNS lookup (${CANONICAL_HOST}): ${cacheIp} (${isPrivateIp(cacheIp) ? "private address" : "public — not a cache"})`);
+    if (cacheIp) L.push(`Server DNS lookup (${CANONICAL_HOST}): ${cacheIp} (${isPrivateIp(cacheIp) ? "resolves to a cache" : "resolves to public CDN"})`);
     if (cacheHost) L.push(`Responding cache instance: ${cacheHost}${distinctInstances > 1 ? ` (+${distinctInstances - 1} more)` : ""}`);
     L.push(`Services resolved: ${summary.resolved + summary.partial}/${services.length}`);
     L.push(`Domains resolved: ${resolvedDomains}/${totalDomains}`);
@@ -417,7 +417,7 @@ export default function StatusPage() {
             label="Server DNS lookup"
             value={cacheIp || "No answer"}
             mono={!!cacheIp}
-            sub={cacheIp ? (isPrivateIp(cacheIp) ? "private address" : "public IP · not a cache") : "server-side, not your network"}
+            sub={cacheIp ? (isPrivateIp(cacheIp) ? "resolves to a cache" : "resolves to public CDN") : "server-side lookup"}
             loading={!cacheIpLoaded}
           />
           <InfoTile icon={Gauge} label="Avg response" value={avgLatency != null ? `${avgLatency} ms` : "—"} sub={avgLatency != null ? "per resolved domain" : undefined} loading={!hasRun} />
@@ -575,13 +575,9 @@ export default function StatusPage() {
           <p className="mt-2.5 text-gray-500">
             {"The "}
             <span className="text-gray-400">Server DNS lookup</span>
-            {" and per-domain resolved IPs are performed by the server hosting this page, not from your browser — browsers can't expose resolved addresses. They reflect the server's own DNS view and can differ from your device. A LanCache must sit on a "}
-            <span className="text-gray-400">private address</span>
-            {", so a "}
-            <span className="text-amber-400">public</span>
-            {" result here means no cache is involved. A private result is necessary but not proof on its own — the "}
+            {" and per-domain resolved IPs are performed by the server hosting this page, not from your browser — browsers can't expose resolved addresses. They reflect the server's own DNS, which can differ from your device — especially in Docker, where the container may not use your LanCache DNS unless configured to. The "}
             <span className="text-gray-400">Resolved / Unresolved</span>
-            {" heartbeat results above are what actually confirm the cache."}
+            {" heartbeat results above run in your browser and are what actually confirm whether your network is using the cache."}
           </p>
         </div>
       </main>

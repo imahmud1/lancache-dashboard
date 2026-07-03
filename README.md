@@ -197,6 +197,8 @@ How it works: the visitor's browser sends a tiny `/lancache-heartbeat` request t
 
 > The **Server DNS lookup** shown on this page is a server-side resolution, so it reflects the *host's* DNS view rather than the visitor's. The browser-side **Resolved / Unresolved** heartbeat is the reliable per-network signal; the page explains this inline. For accurate results the page must be served over `http://` — browsers block secure pages from reaching the cache's plain-HTTP heartbeat (a warning is shown when loaded over HTTPS).
 
+> **Docker note** — In a container, the server-side lookup uses Docker's default resolver, so cache domains may resolve to the public CDN even when your clients correctly use the cache. To make the **Server DNS lookup** match your network, point the container at your LanCache DNS with a `dns:` entry in `docker-compose.yml` (see the example file). This only affects the server-side lookup — the browser heartbeat is unaffected.
+
 ---
 
 ## Manual Ingestion
