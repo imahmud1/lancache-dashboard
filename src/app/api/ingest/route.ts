@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseLogFile } from "@/lib/parser";
-import { getDb } from "@/lib/db";
+import { parseLogFile, clearForReprocess } from "@/lib/parser";
 import { ingestProgress, tryAcquireIngest, releaseIngest } from "@/lib/progress";
 import { checkAdmin } from "@/lib/auth";
 import fs from "fs";
@@ -21,20 +20,10 @@ async function runIngest(reprocess = false) {
   ingestProgress.message = reprocess ? "Rebuilding from log..." : "Starting...";
 
   try {
-    // Rebuild: the rollups use additive upserts, so re-reading the log on top of
-    // existing rows would double-count. Clear them first, then re-read the whole
-    // file from the start. Note this only recovers what the current log still
-    // contains — anything already rotated out is gone (guarded by a UI confirm).
+    // Clear log-derived rollups and rewind the cursor so the full re-read rebuilds
+    // totals with current extraction logic instead of double-counting them.
     if (reprocess) {
-      const db = getDb();
-      const wipe = db.transaction(() => {
-        db.prepare("DELETE FROM hourly_stats").run();
-        db.prepare("DELETE FROM daily_stats").run();
-        db.prepare("DELETE FROM cached_games").run();
-        db.prepare("DELETE FROM recent_activity").run();
-        db.prepare("UPDATE parse_state SET last_position = 0, last_file_size = 0 WHERE id = 1").run();
-      });
-      wipe();
+      clearForReprocess();
     }
 
     try {
