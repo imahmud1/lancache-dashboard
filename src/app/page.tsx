@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw, Radar } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { ServiceChart } from "@/components/ServiceChart";
 import { BandwidthChart } from "@/components/BandwidthChart";
@@ -224,6 +225,15 @@ export default function Dashboard() {
               <span className="hidden md:inline">{includeAll ? "Showing prefill" : "Hiding prefill"}</span>
             </button>
 
+            <Link
+              href="/status"
+              title="Check whether this network's LanCache is intercepting supported services"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors border bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+            >
+              <Radar className="w-4 h-4" />
+              <span className="hidden md:inline">Status Check</span>
+            </Link>
+
             {canAdmin && (
               <>
                 <button
@@ -398,11 +408,6 @@ export default function Dashboard() {
             {" · "}
             <a href="https://github.com/imahmud1/lancache-dashboard" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors">
               Source
-            </a>
-            {" · "}
-            Sponsored by{" "}
-            <a href="https://dotinternetbd.com/" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors">
-              Dot Internet
             </a>
           </p>
           <p className="text-[11px] text-gray-700">MIT License</p>
