@@ -34,6 +34,9 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 ### Clients
 ![Clients](docs/screenshots/clients.png)
 
+### Status Check
+![Status Check](docs/screenshots/status-check.png)
+
 ---
 
 ## Features
@@ -45,6 +48,7 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 - **Top clients leaderboard** — Which machines pulled the most, how much they saved from cache, and their hit rate.
 - **Daily bandwidth trend** — A 30-day stacked chart of cache vs internet traffic.
 - **Automatic ingestion** — New log lines are parsed every 60 seconds. Handles log rotation automatically.
+- **Status Check page** — A standalone `/status` checker that tests, from the visitor's own browser, whether their network is routing supported services through a LanCache. Useful for sharing with users on your network. *(See [Status Check](#status-check) below.)*
 - **Tiny footprint** — Hundreds of GB of logs aggregate down to a SQLite DB measured in megabytes.
 
 ---
@@ -179,6 +183,22 @@ For disk-accurate "what's actually cached right now", a full cache-folder scanne
 
 ---
 
+## Status Check
+
+A standalone page at **`/status`** (linked from the header) that answers a single question for anyone on your network: *is my connection actually using the cache?* It's the modern, browser-based equivalent of the old "is LanCache working?" pages, and the official [uklans/diagnostics](https://github.com/uklans/diagnostics) tool.
+
+How it works: the visitor's browser sends a tiny `/lancache-heartbeat` request to each CDN hostname from the [uklans/cache-domains](https://github.com/uklans/cache-domains) list. A LanCache instance answers with an HTTP `204` and an `X-LanCache-Processed-By` header identifying itself; a real CDN has no such endpoint, so the request is rejected. Because the checks run in *the visitor's* browser, the results reflect *their* network path — not the server's.
+
+- **Overall verdict** — a clear "active / partial / not detected" banner, plus the responding cache instance as proof.
+- **Per-service results** — every service from the community domain list, each expandable to show its individual domains with resolved IP, latency, and Resolved/Unresolved status.
+- **Search & filter** — narrow the list by name/domain or filter to only Partial/Unresolved services.
+- **Live mode** — optionally re-run the checks every 5–30s while the page is open (checks run client-side, so nothing runs in the background).
+- **Copy / download report** — export a plain-text summary to share when troubleshooting.
+
+> The **Server DNS lookup** shown on this page is a server-side resolution, so it reflects the *host's* DNS view rather than the visitor's. The browser-side **Resolved / Unresolved** heartbeat is the reliable per-network signal; the page explains this inline. For accurate results the page must be served over `http://` — browsers block secure pages from reaching the cache's plain-HTTP heartbeat (a warning is shown when loaded over HTTPS).
+
+---
+
 ## Manual Ingestion
 
 The dashboard ingests automatically, but you can trigger a pass manually:
@@ -230,16 +250,11 @@ WantedBy=multi-user.target
 - **[regix1/lancache-manager](https://github.com/regix1/lancache-manager)** and **[regix1/lancache-pics](https://github.com/regix1/lancache-pics)** — for the pre-built Steam depot → app mapping that powers Steam game identification. The lancache-manager project is MIT licensed.
 - **[tpill90/battlenet-lancache-prefill](https://github.com/tpill90/battlenet-lancache-prefill)** — for the Battle.net TACT product code reference used to resolve Blizzard/Activision game names from CDN hostnames.
 - **[DeveLanCacheUI](https://github.com/devedse/DeveLanCacheUI_Backend)** — prior art and inspiration for log-based LanCache monitoring.
-- **[uklans/cache-domains](https://github.com/uklans/cache-domains)** — the canonical list of cacheable CDN domains that LanCache routes, used as the service registry reference.
+- **[uklans/cache-domains](https://github.com/uklans/cache-domains)** — the canonical list of cacheable CDN domains that LanCache routes, used as the service registry reference and by the Status Check page.
+- **[uklans/diagnostics](https://github.com/uklans/diagnostics)** — the official LanCache diagnostics tool, referenced when designing the browser-based Status Check page.
 - **Steam Store Web API** — for resolving depots not yet in the PICS snapshot, and for header art.
 
 Game names, cover images, and related metadata are property of their respective owners and are used here for identification purposes only.
-
----
-
-## Sponsors
-
-This project is sponsored and backed by **[Dot Internet](https://dotinternetbd.com/)**.
 
 ---
 
