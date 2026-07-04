@@ -190,14 +190,12 @@ A standalone page at **`/status`** (linked from the header) that answers a singl
 How it works: the visitor's browser sends a tiny `/lancache-heartbeat` request to each CDN hostname from the [uklans/cache-domains](https://github.com/uklans/cache-domains) list. A LanCache instance answers with an HTTP `204` and an `X-LanCache-Processed-By` header identifying itself; a real CDN has no such endpoint, so the request is rejected. Because the checks run in *the visitor's* browser, the results reflect *their* network path — not the server's.
 
 - **Overall verdict** — a clear "active / partial / not detected" banner, plus the responding cache instance as proof.
-- **Per-service results** — every service from the community domain list, each expandable to show its individual domains with resolved IP, latency, and Resolved/Unresolved status.
+- **Per-service results** — every service from the community domain list, each expandable to show its individual domains with latency and Resolved/Unresolved status.
 - **Search & filter** — narrow the list by name/domain or filter to only Partial/Unresolved services.
 - **Live mode** — optionally re-run the checks every 5–30s while the page is open (checks run client-side, so nothing runs in the background).
 - **Copy / download report** — export a plain-text summary to share when troubleshooting.
 
-> The **Server DNS lookup** shown on this page is a server-side resolution, so it reflects the *host's* DNS view rather than the visitor's. The browser-side **Resolved / Unresolved** heartbeat is the reliable per-network signal; the page explains this inline. For accurate results the page must be served over `http://` — browsers block secure pages from reaching the cache's plain-HTTP heartbeat (a warning is shown when loaded over HTTPS).
-
-> **Docker note** — In a container, the server-side lookup uses Docker's default resolver, so cache domains may resolve to the public CDN even when your clients correctly use the cache. To make the **Server DNS lookup** match your network, point the container at your LanCache DNS with a `dns:` entry in `docker-compose.yml` (see the example file). This only affects the server-side lookup — the browser heartbeat is unaffected.
+> Every check runs **entirely in the visitor's browser** against their own connection, so results reflect the network they're actually on — not the server hosting the page. For accurate results the page must be served over `http://` — browsers block secure pages from reaching the cache's plain-HTTP heartbeat (a warning is shown when loaded over HTTPS).
 
 ---
 

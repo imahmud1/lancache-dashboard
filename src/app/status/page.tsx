@@ -15,7 +15,6 @@ import {
   Server,
   Globe,
   Gauge,
-  Boxes,
   ChevronRight,
   Copy,
   Check,
@@ -29,20 +28,7 @@ import Link from "next/link";
 import { getServiceColor } from "@/lib/services";
 
 const WILDCARD_PREFIX = "lancachetest.";
-const CANONICAL_HOST = "lancache.steamcontent.com";
 const INTERVAL_OPTIONS = [5, 10, 20, 30];
-
-/** RFC1918 / loopback / link-local — a private address usually means a local cache. */
-function isPrivateIp(ip: string): boolean {
-  return (
-    /^10\./.test(ip) ||
-    /^192\.168\./.test(ip) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
-    /^127\./.test(ip) ||
-    /^169\.254\./.test(ip) ||
-    ip === "::1"
-  );
-}
 
 interface ServiceEntry {
   key: string;
@@ -56,9 +42,11 @@ type Filter = "all" | "resolved" | "partial" | "unresolved";
 
 interface DomainResult {
   domain: string;
+  target?: string; // actual hostname tested (wildcards become lancachetest.*)
   ok: boolean;
   ms: number;
   host?: string;
+  reason?: string; // why a check failed
 }
 
 interface ServiceResult {
@@ -87,51 +75,37 @@ async function checkDomain(domain: string): Promise<DomainResult> {
     });
     const ms = Math.round(performance.now() - start);
     if (res.status === 204) {
-      return { domain, ok: true, ms, host: res.headers.get("X-LanCache-Processed-By") || undefined };
+      return { domain, target, ok: true, ms, host: res.headers.get("X-LanCache-Processed-By") || undefined };
     }
-    return { domain, ok: false, ms };
-  } catch {
-    return { domain, ok: false, ms: Math.round(performance.now() - start) };
-  }
-}
-
-async function resolveHosts(hosts: string[]): Promise<Record<string, string[]>> {
-  try {
-    const res = await fetch("/api/resolve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hosts }),
-    });
-    const data = await res.json();
-    return data.results || {};
-  } catch {
-    return {};
+    // Something answered but it wasn't the cache's heartbeat.
+    return { domain, target, ok: false, ms, reason: "not cached" };
+  } catch (e) {
+    const ms = Math.round(performance.now() - start);
+    const reason = e instanceof DOMException && e.name === "TimeoutError" ? "timed out" : "no response";
+    return { domain, target, ok: false, ms, reason };
   }
 }
 
 export default function StatusPage() {
   const [services, setServices] = useState<ServiceEntry[]>([]);
   const [results, setResults] = useState<Record<string, ServiceResult>>({});
-  const [ipMap, setIpMap] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [live, setLive] = useState(false);
   const [intervalSec, setIntervalSec] = useState(20);
   const [reportCopied, setReportCopied] = useState(false);
-  const [cacheIpLoaded, setCacheIpLoaded] = useState(false);
   const [isHttps, setIsHttps] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [lastRun, setLastRun] = useState<Date | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [origin, setOrigin] = useState("");
-  const [cacheIp, setCacheIp] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
   // Custom domain test
   const [customDomain, setCustomDomain] = useState("");
-  const [customResult, setCustomResult] = useState<(DomainResult & { ip?: string }) | null>(null);
+  const [customResult, setCustomResult] = useState<DomainResult | null>(null);
   const [customChecking, setCustomChecking] = useState(false);
 
   useEffect(() => {
@@ -144,9 +118,6 @@ export default function StatusPage() {
       .then((d) => setServices(d.services || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-    resolveHosts([CANONICAL_HOST])
-      .then((r) => setCacheIp(r[CANONICAL_HOST]?.[0] ?? null))
-      .finally(() => setCacheIpLoaded(true));
   }, []);
 
   const hasRunRef = useRef(false);
@@ -204,32 +175,17 @@ export default function StatusPage() {
     if (!d) return;
     setCustomChecking(true);
     setCustomResult(null);
-    const [res, ips] = await Promise.all([checkDomain(d), resolveHosts([d])]);
-    setCustomResult({ ...res, ip: ips[d]?.[0] });
+    setCustomResult(await checkDomain(d));
     setCustomChecking(false);
   };
 
-  const resolveMissing = useCallback(
-    async (domains: string[]) => {
-      const missing = domains.filter((d) => !(d in ipMap));
-      if (!missing.length) return;
-      for (let i = 0; i < missing.length; i += 100) {
-        const resolved = await resolveHosts(missing.slice(i, i + 100));
-        setIpMap((prev) => ({ ...prev, ...resolved }));
-      }
-    },
-    [ipMap]
-  );
-
-  const handleToggle = (service: ServiceEntry) => {
-    const key = service.key;
+  const handleToggle = (key: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-    resolveMissing(service.domains);
   };
 
   const summary = useMemo(() => {
@@ -244,10 +200,12 @@ export default function StatusPage() {
     for (const r of Object.values(results)) if (r.respondingHost) return r.respondingHost;
     return undefined;
   }, [results]);
-  const avgLatency = useMemo(() => {
-    const all = Object.values(results).flatMap((r) => r.domains.filter((d) => d.ok).map((d) => d.ms));
-    return all.length ? Math.round(all.reduce((a, b) => a + b, 0) / all.length) : null;
-  }, [results]);
+  const latencies = useMemo(
+    () => Object.values(results).flatMap((r) => r.domains.filter((d) => d.ok).map((d) => d.ms)),
+    [results]
+  );
+  const avgLatency = latencies.length ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : null;
+  const fastestLatency = latencies.length ? Math.min(...latencies) : null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -261,12 +219,7 @@ export default function StatusPage() {
 
   const allExpanded = filtered.length > 0 && filtered.every((s) => expanded.has(s.key));
   const toggleAll = () => {
-    if (allExpanded) {
-      setExpanded(new Set());
-    } else {
-      setExpanded(new Set(filtered.map((s) => s.key)));
-      resolveMissing(filtered.flatMap((s) => s.domains));
-    }
+    setExpanded(allExpanded ? new Set() : new Set(filtered.map((s) => s.key)));
   };
 
   const anyResolved = summary.resolved + summary.partial > 0;
@@ -288,7 +241,6 @@ export default function StatusPage() {
     const L: string[] = [];
     L.push(`LanCache Status Check — ${new Date().toLocaleString()}`);
     L.push(`Serving host: ${origin || "unknown"} (${isHttps ? "https" : "http"})`);
-    if (cacheIp) L.push(`Server DNS lookup (${CANONICAL_HOST}): ${cacheIp} (${isPrivateIp(cacheIp) ? "resolves to a cache" : "resolves to public CDN"})`);
     if (cacheHost) L.push(`Responding cache instance: ${cacheHost}${distinctInstances > 1 ? ` (+${distinctInstances - 1} more)` : ""}`);
     L.push(`Services resolved: ${summary.resolved + summary.partial}/${services.length}`);
     L.push(`Domains resolved: ${resolvedDomains}/${totalDomains}`);
@@ -299,8 +251,7 @@ export default function StatusPage() {
       const doms = r?.domains.length ? r.domains : s.domains.map((d) => ({ domain: d, ok: false, ms: 0 } as DomainResult));
       L.push(`[${s.label}] ${r ? r.status : "unchecked"} ${r ? `${r.working}/${r.total}` : ""}`.trimEnd());
       for (const d of doms) {
-        const ip = ipMap[d.domain]?.[0] ?? "-";
-        L.push(`   ${d.domain}  |  ${ip}  |  ${d.ok ? `${d.ms}ms` : "-"}  |  ${d.ok ? "resolved" : "unresolved"}`);
+        L.push(`   ${d.domain}  |  ${d.ok ? `${d.ms}ms` : "-"}  |  ${d.ok ? "resolved" : d.reason ?? "unresolved"}`);
       }
       L.push("");
     }
@@ -388,7 +339,6 @@ export default function StatusPage() {
         <VerdictHero
           verdict={verdict}
           running={running}
-          cacheHost={cacheHost}
           resolvedServices={summary.resolved + summary.partial}
           totalServices={services.length}
           resolvedDomains={resolvedDomains}
@@ -412,22 +362,9 @@ export default function StatusPage() {
 
         {/* Session / network info */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <InfoTile
-            icon={Server}
-            label="Server DNS lookup"
-            value={cacheIp || "No answer"}
-            mono={!!cacheIp}
-            sub={cacheIp ? (isPrivateIp(cacheIp) ? "resolves to a cache" : "resolves to public CDN") : "server-side lookup"}
-            loading={!cacheIpLoaded}
-          />
+          <CacheResponseTile host={cacheHost} instances={distinctInstances} loading={!hasRun} />
           <InfoTile icon={Gauge} label="Avg response" value={avgLatency != null ? `${avgLatency} ms` : "—"} sub={avgLatency != null ? "per resolved domain" : undefined} loading={!hasRun} />
-          <InfoTile
-            icon={Boxes}
-            label="Cache instances"
-            value={hasRun ? String(distinctInstances) : "—"}
-            sub={hasRun ? (distinctInstances === 1 ? "node responded" : "distinct nodes responded") : undefined}
-            loading={!hasRun}
-          />
+          <InfoTile icon={Zap} label="Fastest response" value={fastestLatency != null ? `${fastestLatency} ms` : "—"} sub={fastestLatency != null ? "quickest heartbeat" : undefined} loading={!hasRun} />
           <InfoTile icon={Globe} label="Serving host" value={origin || "—"} sub={isHttps ? "https" : "http"} mono />
         </div>
 
@@ -467,7 +404,6 @@ export default function StatusPage() {
               <span className="text-gray-500">·</span>
               <span>{customResult.ok ? "Resolved through LanCache" : "Not routed through LanCache"}</span>
               <span className="ml-auto flex items-center gap-3 text-[11px] text-gray-500">
-                {customResult.ip && <span className="font-mono">{customResult.ip}</span>}
                 <span>{customResult.ms} ms</span>
                 {customResult.ok && customResult.host && <span className="font-mono text-emerald-400/80 truncate max-w-[160px]">{customResult.host}</span>}
               </span>
@@ -543,9 +479,8 @@ export default function StatusPage() {
                   key={s.key}
                   service={s}
                   result={results[s.key]}
-                  ipMap={ipMap}
                   expanded={expanded.has(s.key)}
-                  onToggle={() => handleToggle(s)}
+                  onToggle={() => handleToggle(s.key)}
                 />
               ))}
             </div>
@@ -573,11 +508,7 @@ export default function StatusPage() {
             {". Resolved means traffic for that service is being intercepted by the cache; it does not measure what is currently stored on disk."}
           </p>
           <p className="mt-2.5 text-gray-500">
-            {"The "}
-            <span className="text-gray-400">Server DNS lookup</span>
-            {" and per-domain resolved IPs are performed by the server hosting this page, not from your browser — browsers can't expose resolved addresses. They reflect the server's own DNS, which can differ from your device — especially in Docker, where the container may not use your LanCache DNS unless configured to. The "}
-            <span className="text-gray-400">Resolved / Unresolved</span>
-            {" heartbeat results above run in your browser and are what actually confirm whether your network is using the cache."}
+            {"Every check runs entirely in your browser against your own connection, so the results reflect the network you're on right now — not the server hosting this page. Nothing is measured or stored server-side."}
           </p>
         </div>
       </main>
@@ -588,7 +519,6 @@ export default function StatusPage() {
 function VerdictHero({
   verdict,
   running,
-  cacheHost,
   resolvedServices,
   totalServices,
   resolvedDomains,
@@ -598,7 +528,6 @@ function VerdictHero({
 }: {
   verdict: "active" | "partial" | "none" | "pending";
   running: boolean;
-  cacheHost?: string;
   resolvedServices: number;
   totalServices: number;
   resolvedDomains: number;
@@ -606,15 +535,6 @@ function VerdictHero({
   lastRun: Date | null;
   durationMs: number | null;
 }) {
-  const [copied, setCopied] = useState(false);
-  const copyHost = () => {
-    if (!cacheHost) return;
-    navigator.clipboard?.writeText(cacheHost).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
   const config = {
     active: {
       icon: ShieldCheck,
@@ -659,22 +579,12 @@ function VerdictHero({
         <div className="min-w-0 flex-1">
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight">{config.title}</h2>
           <p className="text-sm text-gray-400 mt-1">{config.sub}</p>
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            {cacheHost && (
-              <button onClick={copyHost} className="group inline-flex items-center gap-2 rounded-lg bg-gray-950/50 border border-gray-800 px-3 py-1.5 max-w-full" title="Copy cache instance">
-                <Server className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="text-[11px] text-gray-500">served by</span>
-                <span className="font-mono text-[11px] text-emerald-300 truncate">{cacheHost}</span>
-                {copied ? <Check className="w-3 h-3 text-emerald-400 shrink-0" /> : <Copy className="w-3 h-3 text-gray-600 group-hover:text-gray-400 shrink-0" />}
-              </button>
-            )}
-            {lastRun && (
-              <span className="text-[11px] text-gray-600">
-                checked {lastRun.toLocaleTimeString()}
-                {durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
-              </span>
-            )}
-          </div>
+          {lastRun && (
+            <p className="text-[11px] text-gray-600 mt-3">
+              checked {lastRun.toLocaleTimeString()}
+              {durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
+            </p>
+          )}
         </div>
         {showCounts && (
           <div className="flex gap-6 sm:gap-8 shrink-0">
@@ -729,6 +639,53 @@ function InfoTile({
   );
 }
 
+/**
+ * The primary evidence: whether a cache actually answered the visitor's
+ * heartbeat. The X-LanCache-Processed-By value (a container ID/hostname) is kept
+ * as small supporting proof — it's cryptic but uniquely fingerprints the cache
+ * that replied, which matters in multi-node setups and for support reports.
+ * Correct for every visitor; no server-side resolution or DNS config.
+ */
+function CacheResponseTile({ host, instances, loading }: { host?: string; instances: number; loading: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!host) return;
+    navigator.clipboard?.writeText(host).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  const accent = host ? "bg-emerald-500/[0.07] border-emerald-500/25" : "bg-gray-900/60 border-gray-800";
+  const iconColor = host ? "text-emerald-400/90" : "text-gray-500";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${accent}`}>
+      <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wide mb-2 ${iconColor}`}>
+        <Server className="w-3.5 h-3.5" /> Cache response
+      </div>
+      {loading ? (
+        <div className="h-4 w-24 rounded bg-gray-800 animate-pulse" />
+      ) : host ? (
+        <>
+          <div className="text-sm font-semibold text-emerald-300">
+            Confirmed{instances > 1 ? ` · ${instances} nodes` : ""}
+          </div>
+          <button onClick={copy} className="group mt-0.5 flex items-center gap-1.5 max-w-full" title="Copy cache ID">
+            <span className="font-mono text-[11px] text-gray-500 truncate group-hover:text-gray-400">{host}</span>
+            {copied ? <Check className="w-3 h-3 text-emerald-400 shrink-0" /> : <Copy className="w-3 h-3 text-gray-600 group-hover:text-gray-400 shrink-0" />}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="text-sm font-semibold text-gray-400">Not detected</div>
+          <div className="text-[11px] text-gray-600 mt-0.5">no heartbeat came back</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function FilterChip({ active, onClick, label, count, tone }: { active: boolean; onClick: () => void; label: string; count: number; tone?: "emerald" | "amber" | "rose" }) {
   const dot = tone === "emerald" ? "bg-emerald-400" : tone === "amber" ? "bg-amber-400" : tone === "rose" ? "bg-rose-400" : "bg-gray-500";
   return (
@@ -748,13 +705,11 @@ function FilterChip({ active, onClick, label, count, tone }: { active: boolean; 
 function ServiceRow({
   service,
   result,
-  ipMap,
   expanded,
   onToggle,
 }: {
   service: ServiceEntry;
   result?: ServiceResult;
-  ipMap: Record<string, string[]>;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -812,24 +767,24 @@ function ServiceRow({
           <div className="hidden sm:flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-wide text-gray-600 border-b border-gray-800/50">
             <span className="w-2" />
             <span className="flex-1">Domain</span>
-            <span className="w-36 text-right">Resolved IP</span>
             <span className="w-16 text-right">Latency</span>
-            <span className="w-20 text-right">Status</span>
+            <span className="w-24 text-right">Status</span>
           </div>
-          {domains.map((d) => {
-            const ip = ipMap[d.domain]?.[0];
-            return (
-              <div key={d.domain} className="flex items-center gap-3 px-4 py-2 border-b border-gray-800/30 last:border-0">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${status === "loading" ? "bg-gray-600 animate-pulse" : d.ok ? "bg-emerald-400" : "bg-rose-400"}`} />
-                <span className="font-mono text-[12px] text-gray-300 truncate flex-1">{d.domain}</span>
-                <span className="hidden sm:block w-36 text-right font-mono text-[11px] text-gray-500 truncate">{ip || "…"}</span>
-                <span className="hidden sm:block w-16 text-right text-[11px] text-gray-500 tabular-nums">{status === "loading" ? "…" : d.ok ? `${d.ms} ms` : "—"}</span>
-                <span className={`w-20 text-right text-[11px] ${status === "loading" ? "text-gray-500" : d.ok ? "text-emerald-400" : "text-rose-400/80"}`}>
-                  {status === "loading" ? "checking" : d.ok ? "resolved" : "unresolved"}
-                </span>
-              </div>
-            );
-          })}
+          {domains.map((d) => (
+            <div key={d.domain} className="flex items-center gap-3 px-4 py-2 border-b border-gray-800/30 last:border-0">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${status === "loading" ? "bg-gray-600 animate-pulse" : d.ok ? "bg-emerald-400" : "bg-rose-400"}`} />
+              <span
+                className="font-mono text-[12px] text-gray-300 truncate flex-1"
+                title={d.target && d.target !== d.domain ? `tested: ${d.target}` : d.domain}
+              >
+                {d.domain}
+              </span>
+              <span className="hidden sm:block w-16 text-right text-[11px] text-gray-500 tabular-nums">{status === "loading" ? "…" : d.ok ? `${d.ms} ms` : "—"}</span>
+              <span className={`w-24 text-right text-[11px] ${status === "loading" ? "text-gray-500" : d.ok ? "text-emerald-400" : "text-rose-400/80"}`}>
+                {status === "loading" ? "checking" : d.ok ? "resolved" : d.reason ?? "unresolved"}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -20,10 +20,3 @@ services:
     volumes:
       - /path/to/lancache/logs:/logs:ro
       - ./data:/app/data
-    # Optional: point the container at your LanCache DNS so the Status Check
-    # page's "Server DNS lookup" matches your network. Without this the
-    # container uses its default resolver, and cache domains resolve to the
-    # public CDN even when your clients correctly use the cache. This only
-    # affects the server-side lookup — the browser heartbeat is unaffected.
-    # dns:
-    #   - 10.10.10.10   # your LanCache DNS server IP
