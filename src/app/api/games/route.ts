@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCachedGames, updateGameName } from "@/lib/queries";
 import { resolveDepotBatch, getResolvedDepots } from "@/lib/steam-resolver";
 import { resolveBattleNetGame, getBattleNetImageUrl } from "@/lib/battlenet-resolver";
+import { resolveEpicName } from "@/lib/epic-resolver";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,16 @@ export async function GET() {
       }
       // Clear the sentinel for display (UI sees empty string, shows placeholder)
       if (game.imageUrl === "none") game.imageUrl = "";
+    }
+
+    // Resolve Epic artifact names from the log path. This is a pure, instant
+    // function of the game_id, so we compute it fresh every request rather than
+    // persisting it — that keeps it correct if the naming logic changes and
+    // avoids stale names sticking in the DB. No cover art without an Epic login.
+    for (const game of games) {
+      if (game.service === "epicgames") {
+        game.gameName = resolveEpicName(game.gameId);
+      }
     }
 
     // Deduplicate: multiple depots for the same game should be merged

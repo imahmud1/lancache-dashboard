@@ -63,10 +63,12 @@ export function extractGameId(service: string, requestPath: string, upstreamHost
       return bnetPathMatch ? bnetPathMatch[1] : null;
     }
 
-    case "epicgames":
-      // Epic: URLs contain app identifiers in some paths like /Builds/Fortnite/...
-      const epicMatch = requestPath.match(/\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\//);
-      return epicMatch ? `${epicMatch[1]}/${epicMatch[2]}` : null;
+    case "epicgames": {
+      // Epic download paths look like /Builds/{ArtifactName}/CloudDir/...
+      // The artifact name is Epic's app identifier (e.g. Fortnite, UnrealEngineLauncher).
+      const epicMatch = requestPath.match(/\/Builds\/([^/]+)\//i);
+      return epicMatch ? epicMatch[1] : null;
+    }
 
     case "riot":
       // Riot: often has game name in the domain or path
