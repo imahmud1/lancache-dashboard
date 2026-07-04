@@ -75,24 +75,27 @@ export function ServiceChart({ data }: { data: ServiceData[] }) {
 
 function ServiceTile({ s }: { s: { service: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number; color: string; pct: number; hitRate: number } }) {
   const hitColor = s.hitRate >= 50 ? "text-green-400" : s.hitRate > 0 ? "text-amber-400" : "text-gray-500";
-  const hitBar = s.hitRate >= 50 ? "bg-green-500" : s.hitRate > 0 ? "bg-amber-500" : "bg-gray-600";
-
   return (
     <div className="rounded-xl bg-gray-800/40 border border-gray-800 hover:border-gray-700 p-4 transition-colors">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-md" style={{ backgroundColor: s.color }} />
-          <span className="text-sm font-semibold text-gray-100">{getServiceLabel(s.service)}</span>
+      {/* Header — cache savings is the headline */}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="w-3 h-3 rounded-md shrink-0" style={{ backgroundColor: s.color }} />
+          <div className="min-w-0">
+            <span className="block text-sm font-semibold text-gray-100 truncate">{getServiceLabel(s.service)}</span>
+            <span className="text-[10px] text-gray-500">{s.pct.toFixed(1)}% of all traffic</span>
+          </div>
         </div>
-        <span className="text-[11px] font-semibold text-gray-400 px-2 py-0.5 rounded-md bg-gray-900/60">
-          {s.pct.toFixed(1)}%
-        </span>
+        <div className="text-right shrink-0">
+          <div className={`text-lg font-bold leading-none ${hitColor}`}>{s.hitRate}%</div>
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">from cache</div>
+        </div>
       </div>
 
-      {/* Share bar */}
-      <div className="h-1.5 rounded-full bg-gray-700/60 overflow-hidden mb-3">
-        <div className="h-full rounded-full" style={{ width: `${Math.max(s.pct, 1.5)}%`, backgroundColor: s.color }} />
+      {/* Cache vs internet split */}
+      <div className="flex h-2 rounded-full overflow-hidden bg-gray-700/60 mb-3">
+        <div className="h-full bg-green-500" style={{ width: `${s.hitRate}%` }} />
+        <div className="h-full bg-amber-500" style={{ width: `${100 - s.hitRate}%` }} />
       </div>
 
       {/* Stats */}
@@ -113,15 +116,6 @@ function ServiceTile({ s }: { s: { service: string; bytesSent: number; requests:
           <p className="text-[10px] text-gray-500 uppercase tracking-wide">From Net</p>
           <p className="text-sm font-semibold text-amber-400">{formatBytes(s.missBytes)}</p>
         </div>
-        <div className="col-span-2">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Cache Hit Rate</p>
-            <span className={`text-[11px] font-bold ${hitColor}`}>{s.hitRate}%</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-gray-700/60 overflow-hidden">
-            <div className={`h-full rounded-full ${hitBar}`} style={{ width: `${Math.max(s.hitRate, 1.5)}%` }} />
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -132,31 +126,41 @@ function ChartView({
   totalBytes,
   totalRequests,
 }: {
-  services: { service: string; bytesSent: number; color: string; pct: number }[];
+  services: { service: string; bytesSent: number; color: string; pct: number; hitBytes: number; missBytes: number; hitRate: number }[];
   totalBytes: number;
   totalRequests: number;
 }) {
+  const totalHit = services.reduce((s, d) => s + d.hitBytes, 0);
+  const totalMiss = services.reduce((s, d) => s + d.missBytes, 0);
+  const overallHit = totalHit + totalMiss > 0 ? Math.round((totalHit / (totalHit + totalMiss)) * 100) : 0;
+
   return (
-    <div className="flex flex-col md:flex-row items-center gap-6">
-      <div className="relative w-44 h-44 shrink-0">
-        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-          <PieChart>
-            <Pie data={services} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="bytesSent" nameKey="service" stroke="none" paddingAngle={2}>
-              {services.map((entry, index) => (
-                <Cell key={index} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "10px", fontSize: "12px" }}
-              labelStyle={{ color: "#9ca3af" }}
-              formatter={(value, name) => [formatBytes(Number(value)), getServiceLabel(String(name))]}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <span className="text-[10px] text-gray-500 uppercase tracking-wide">Total</span>
-          <span className="text-base font-bold text-gray-100">{formatBytes(totalBytes)}</span>
-          <span className="text-[10px] text-gray-500">{formatNumber(totalRequests)} req</span>
+    <div className="flex flex-col md:flex-row md:items-center gap-6">
+      <div className="shrink-0 flex flex-col items-center gap-3 mx-auto md:mx-0">
+        <div className="relative w-44 h-44">
+          {/* Rendered behind the chart so the hover tooltip stays on top */}
+          <div className="absolute inset-0 z-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">From cache</span>
+            <span className={`text-2xl font-bold ${overallHit >= 50 ? "text-green-400" : overallHit > 0 ? "text-amber-400" : "text-gray-400"}`}>{overallHit}%</span>
+          </div>
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <PieChart>
+              <Pie data={services} cx="50%" cy="50%" innerRadius={50} outerRadius={75} dataKey="bytesSent" nameKey="service" stroke="none" paddingAngle={2}>
+                {services.map((entry, index) => (
+                  <Cell key={index} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                wrapperStyle={{ zIndex: 50 }}
+                contentStyle={{ backgroundColor: "#111827", border: "1px solid #374151", borderRadius: "10px", fontSize: "12px" }}
+                labelStyle={{ color: "#9ca3af" }}
+                formatter={(value, name) => [formatBytes(Number(value)), getServiceLabel(String(name))]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="text-[11px] text-gray-500 text-center">
+          {formatBytes(totalBytes)} served · {formatNumber(totalRequests)} req
         </div>
       </div>
 
@@ -165,7 +169,7 @@ function ChartView({
           <div key={s.service} className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
             <span className="text-xs text-gray-300 flex-1 truncate">{getServiceLabel(s.service)}</span>
-            <span className="text-[11px] text-gray-500">{s.pct.toFixed(1)}%</span>
+            <span className={`text-[11px] font-medium ${s.hitRate >= 50 ? "text-green-400" : s.hitRate > 0 ? "text-amber-400" : "text-gray-600"}`}>{s.hitRate}%</span>
             <span className="text-xs font-medium text-gray-400 w-16 text-right">{formatBytes(s.bytesSent)}</span>
           </div>
         ))}
