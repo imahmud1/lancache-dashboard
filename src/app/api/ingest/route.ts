@@ -12,18 +12,29 @@ const LOG_PATH = process.env.LOG_PATH || path.join(process.cwd(), "..", "logs", 
 
 async function runIngest(reprocess = false) {
   ingestProgress.running = true;
+  ingestProgress.error = false;
   ingestProgress.lines = 0;
   ingestProgress.bytesRead = 0;
   ingestProgress.totalBytes = 0;
   ingestProgress.startedAt = Date.now();
   ingestProgress.finishedAt = 0;
-  ingestProgress.message = reprocess ? "Reprocessing from start..." : "Starting...";
+  ingestProgress.message = reprocess ? "Rebuilding from log..." : "Starting...";
 
   try {
-    // Reset parse position to re-read the full file with current extraction logic
+    // Rebuild: the rollups use additive upserts, so re-reading the log on top of
+    // existing rows would double-count. Clear them first, then re-read the whole
+    // file from the start. Note this only recovers what the current log still
+    // contains — anything already rotated out is gone (guarded by a UI confirm).
     if (reprocess) {
       const db = getDb();
-      db.prepare("UPDATE parse_state SET last_position = 0 WHERE id = 1").run();
+      const wipe = db.transaction(() => {
+        db.prepare("DELETE FROM hourly_stats").run();
+        db.prepare("DELETE FROM daily_stats").run();
+        db.prepare("DELETE FROM cached_games").run();
+        db.prepare("DELETE FROM recent_activity").run();
+        db.prepare("UPDATE parse_state SET last_position = 0, last_file_size = 0 WHERE id = 1").run();
+      });
+      wipe();
     }
 
     try {
@@ -36,14 +47,15 @@ async function runIngest(reprocess = false) {
       ingestProgress.lines = p.lines;
       ingestProgress.bytesRead = p.bytesRead;
       ingestProgress.totalBytes = p.totalBytes;
-      ingestProgress.message = `${reprocess ? "Reprocessing" : "Processing"}... ${p.lines.toLocaleString()} entries`;
+      ingestProgress.message = `${reprocess ? "Rebuilding" : "Processing"}... ${p.lines.toLocaleString()} entries`;
     });
 
     ingestProgress.lines = Math.max(ingestProgress.lines, lines);
     ingestProgress.message = lines > 0
-      ? `Done — ${lines.toLocaleString()} entries ${reprocess ? "reprocessed" : "ingested"}`
+      ? `Done — ${lines.toLocaleString()} entries ${reprocess ? "rebuilt" : "ingested"}`
       : "Up to date — no new entries";
   } catch (err) {
+    ingestProgress.error = true;
     ingestProgress.message = `Error: ${String(err)}`;
     console.error("[ingest] error:", err);
   } finally {

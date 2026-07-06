@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import Link from "next/link";
-import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw, Radar } from "lucide-react";
+import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw, Radar, ChevronDown, AlertTriangle } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { ServiceChart } from "@/components/ServiceChart";
 import { BandwidthChart } from "@/components/BandwidthChart";
@@ -37,8 +37,8 @@ export default function Dashboard() {
   const [recent, setRecent] = useState<
     { id: number; timestamp: string; service: string; clientIp: string; requestPath: string; bytesSent: number; cacheStatus: string; upstreamHost: string }[]
   >([]);
-  const [ingest, setIngest] = useState<{ running: boolean; percent: number; lines: number; message: string }>({
-    running: false, percent: 0, lines: 0, message: "",
+  const [ingest, setIngest] = useState<{ running: boolean; error: boolean; percent: number; lines: number; message: string }>({
+    running: false, error: false, percent: 0, lines: 0, message: "",
   });
   const [depot, setDepot] = useState<{ running: boolean; percent: number; phase: string; message: string; speedBps: number }>({
     running: false, percent: 0, phase: "idle", message: "", speedBps: 0,
@@ -47,6 +47,12 @@ export default function Dashboard() {
   const [authRequired, setAuthRequired] = useState(false);
   const [adminKey, setAdminKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [adminInput, setAdminInput] = useState("");
+  const [adminError, setAdminError] = useState("");
+  const [adminChecking, setAdminChecking] = useState(false);
 
   // Load persisted toggle + admin key, and check whether auth is required
   useEffect(() => {
@@ -64,19 +70,30 @@ export default function Dashboard() {
   const canAdmin = !authRequired || !!adminKey;
   const adminHeaders: HeadersInit | undefined = adminKey ? { "x-api-key": adminKey } : undefined;
 
-  const handleUnlock = async () => {
-    const key = typeof window !== "undefined" ? window.prompt("Enter admin key") : null;
+  const openAdminModal = () => {
+    setAdminInput("");
+    setAdminError("");
+    setAdminModalOpen(true);
+  };
+
+  const submitAdminKey = async () => {
+    const key = adminInput.trim();
     if (!key) return;
+    setAdminChecking(true);
+    setAdminError("");
     try {
       const res = await fetch("/api/auth", { method: "POST", headers: { "x-api-key": key } });
       if (res.ok) {
         localStorage.setItem("adminKey", key);
         setAdminKey(key);
+        setAdminModalOpen(false);
       } else {
-        alert("Invalid admin key");
+        setAdminError("That key wasn't accepted. Check it and try again.");
       }
     } catch {
-      alert("Could not validate key");
+      setAdminError("Couldn't reach the server to validate the key.");
+    } finally {
+      setAdminChecking(false);
     }
   };
 
@@ -137,13 +154,13 @@ export default function Dashboard() {
     } catch {
       return;
     }
-    setIngest((s) => ({ ...s, running: true, message: reprocess ? "Reprocessing..." : "Starting..." }));
+    setIngest((s) => ({ ...s, running: true, error: false, message: reprocess ? "Rebuilding…" : "Starting…" }));
 
     const poll = async () => {
       try {
         const r = await fetch("/api/ingest");
         const p = await r.json();
-        setIngest({ running: p.running, percent: p.percent ?? 0, lines: p.lines ?? 0, message: p.message ?? "" });
+        setIngest({ running: p.running, error: !!p.error, percent: p.percent ?? 0, lines: p.lines ?? 0, message: p.message ?? "" });
         if (p.running) {
           setTimeout(poll, 1000);
         } else {
@@ -154,6 +171,11 @@ export default function Dashboard() {
       }
     };
     setTimeout(poll, 600);
+  };
+
+  const confirmRebuild = () => {
+    setRebuildOpen(false);
+    handleIngest(true);
   };
 
   const handleDepotRefresh = async () => {
@@ -235,34 +257,55 @@ export default function Dashboard() {
             </Link>
 
             {canAdmin && (
-              <>
+              <div className="relative">
                 <button
-                  onClick={handleDepotRefresh}
-                  disabled={depot.running}
-                  title="Download the latest Steam depot → game mapping"
-                  className="flex items-center gap-2 px-3.5 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 rounded-xl text-sm font-medium transition-colors border border-gray-700"
+                  onClick={() => setMenuOpen((o) => !o)}
+                  title="Ingest, rebuild, and depot actions"
+                  className="flex items-center gap-2 px-3.5 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm font-medium transition-colors border border-gray-700 text-gray-300"
                 >
-                  <Boxes className={`w-4 h-4 ${depot.running ? "animate-pulse text-purple-400" : "text-gray-400"}`} />
-                  <span className="hidden sm:inline">{depot.running ? "Updating…" : "Update Depots"}</span>
+                  {ingest.running || depot.running ? (
+                    <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                  ) : (
+                    <Database className="w-4 h-4 text-gray-400" />
+                  )}
+                  <span className="hidden sm:inline">Manage</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
                 </button>
-                <button
-                  onClick={() => handleIngest(true)}
-                  disabled={ingest.running}
-                  title="Reprocess entire log with latest extraction logic"
-                  className="flex items-center gap-2 px-3.5 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 rounded-xl text-sm font-medium transition-colors border border-gray-700 text-gray-400 hover:text-gray-200"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span className="hidden sm:inline">Reprocess</span>
-                </button>
-                <button
-                  onClick={() => handleIngest(false)}
-                  disabled={ingest.running}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-800 disabled:text-gray-500 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-blue-600/20 disabled:shadow-none"
-                >
-                  <RefreshCw className={`w-4 h-4 ${ingest.running ? "animate-spin" : ""}`} />
-                  {ingest.running ? "Ingesting…" : "Ingest Logs"}
-                </button>
-              </>
+
+                {menuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+                    <div className="absolute right-0 mt-2 w-60 z-40 rounded-xl border border-gray-800 bg-gray-900 shadow-xl shadow-black/40 py-1.5">
+                      <MenuItem
+                        icon={RefreshCw}
+                        accent="blue"
+                        label={ingest.running ? "Ingesting…" : "Ingest new logs"}
+                        hint="Add log lines written since the last run"
+                        disabled={ingest.running}
+                        onClick={() => { setMenuOpen(false); handleIngest(false); }}
+                      />
+                      <MenuItem
+                        icon={Boxes}
+                        accent="purple"
+                        label={depot.running ? "Updating depots…" : "Update depots"}
+                        hint="Refresh the Steam depot → game name mapping"
+                        disabled={depot.running}
+                        onClick={() => { setMenuOpen(false); handleDepotRefresh(); }}
+                      />
+                      <div className="my-1.5 border-t border-gray-800" />
+                      <MenuItem
+                        icon={AlertTriangle}
+                        label="Rebuild from log…"
+                        hint="Clears totals and recounts from access.log"
+                        accent="red"
+                        danger
+                        disabled={ingest.running}
+                        onClick={() => { setMenuOpen(false); setRebuildOpen(true); }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
             {authRequired && (
@@ -277,7 +320,7 @@ export default function Dashboard() {
                 </button>
               ) : (
                 <button
-                  onClick={handleUnlock}
+                  onClick={openAdminModal}
                   title="Unlock admin actions with your key"
                   className="flex items-center gap-2 px-3 py-2 bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 rounded-xl text-sm font-medium transition-colors"
                 >
@@ -324,7 +367,7 @@ export default function Dashboard() {
         {/* Last result toast */}
         {!ingest.running && ingest.message && (
           <div className="max-w-7xl mx-auto px-6 pb-2">
-            <span className="text-[11px] text-gray-500">{ingest.message}</span>
+            <span className={`text-[11px] ${ingest.error ? "text-rose-400" : "text-gray-500"}`}>{ingest.message}</span>
           </div>
         )}
         {!depot.running && depot.message && (
@@ -413,7 +456,134 @@ export default function Dashboard() {
           <p className="text-[11px] text-gray-700">MIT License</p>
         </div>
       </footer>
+
+      {/* Rebuild confirmation */}
+      {rebuildOpen && (
+        <Modal onClose={() => setRebuildOpen(false)}>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-white">Rebuild from log?</h3>
+              <p className="text-sm text-gray-400 mt-1.5 leading-relaxed">
+                This clears all current totals and recounts from <span className="font-mono text-gray-300">access.log</span>. It fixes
+                inflated numbers, but any history that has already rotated out of the log{" "}
+                <span className="text-red-300">can&apos;t be recovered</span>.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <button
+              onClick={() => setRebuildOpen(false)}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmRebuild}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-500 transition-colors shadow-lg shadow-red-600/20"
+            >
+              Rebuild
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Admin unlock */}
+      {adminModalOpen && (
+        <Modal onClose={() => setAdminModalOpen(false)}>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
+              <Lock className="w-5 h-5 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base font-semibold text-white">Admin access</h3>
+              <p className="text-sm text-gray-400 mt-1.5">Enter your admin key to unlock ingest, rebuild, and depot actions.</p>
+            </div>
+          </div>
+          <input
+            type="password"
+            autoFocus
+            value={adminInput}
+            onChange={(e) => setAdminInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submitAdminKey()}
+            placeholder="Admin key"
+            className="mt-4 w-full px-4 py-2.5 bg-gray-950/60 border border-gray-700 rounded-xl text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50"
+          />
+          {adminError && <p className="mt-2 text-[12px] text-rose-400">{adminError}</p>}
+          <div className="flex justify-end gap-2 mt-5">
+            <button
+              onClick={() => setAdminModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitAdminKey}
+              disabled={adminChecking || !adminInput.trim()}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-600/20"
+            >
+              {adminChecking ? "Checking…" : "Unlock"}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl shadow-black/50 p-6">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function MenuItem({
+  icon: Icon,
+  label,
+  hint,
+  onClick,
+  disabled,
+  danger,
+  accent = "blue",
+}: {
+  icon: typeof RefreshCw;
+  label: string;
+  hint?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  accent?: "blue" | "purple" | "amber" | "red";
+}) {
+  const chip = {
+    blue: "bg-blue-500/15 text-blue-400",
+    purple: "bg-purple-500/15 text-purple-400",
+    amber: "bg-amber-500/15 text-amber-400",
+    red: "bg-red-500/15 text-red-400",
+  }[accent];
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`group w-full flex items-start gap-3 px-3 py-2 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        danger ? "hover:bg-red-500/10" : "hover:bg-gray-800"
+      }`}
+    >
+      <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${chip}`}>
+        <Icon className="w-4 h-4" />
+      </span>
+      <span className="min-w-0">
+        <span className={`block text-sm font-medium ${danger ? "text-red-300" : "text-gray-100"}`}>{label}</span>
+        {hint && <span className="block text-[11px] text-gray-500 leading-snug">{hint}</span>}
+      </span>
+    </button>
   );
 }
 
