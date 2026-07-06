@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 import fs from "fs";
-import readline from "readline";
+import { StringDecoder } from "string_decoder";
 
 export interface ParsedLogEntry {
   service: string;
@@ -136,15 +136,15 @@ export async function parseLogFile(
     return 0;
   }
 
+  // Read in large binary chunks and split lines ourselves. Using readline's
+  // per-line async iterator over tens of millions of lines creates one promise
+  // per line, which overflows Node's async-hooks tracking in Next dev
+  // ("RangeError: Map maximum size exceeded"). One await per chunk keeps it bounded.
   const fileStream = fs.createReadStream(logPath, {
     start: startPosition,
-    encoding: "utf-8",
+    highWaterMark: 1 << 22, // 4 MB chunks
   });
-
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity,
-  });
+  const decoder = new StringDecoder("utf-8");
 
   // Prepare statements
   const upsertHourly = db.prepare(`
@@ -194,7 +194,13 @@ export async function parseLogFile(
   let batch: ParsedLogEntry[] = [];
   const BATCH_SIZE = 10000;
 
-  const flushBatch = () => {
+  // The rollups are additive upserts, so the parse cursor must advance in the
+  // SAME transaction that writes each batch. Otherwise a crash, restart, or
+  // overlapping ingest between a committed batch and the cursor write would make
+  // the next run re-read that span and double-count it. Committing rows + cursor
+  // atomically makes ingestion idempotent per batch, so a resumed run continues
+  // exactly after the last committed batch — no gap, no overlap.
+  const flushBatch = (positionAfterBatch: number) => {
     if (batch.length === 0) return;
 
     const insertBatch = db.transaction((entries: ParsedLogEntry[]) => {
@@ -225,6 +231,9 @@ export async function parseLogFile(
           entry.path, entry.bytesSent, entry.cacheStatus, entry.upstreamHost
         );
       }
+
+      // Advance the cursor together with the rows this batch just wrote.
+      updateState.run(positionAfterBatch, fileSize);
     });
 
     insertBatch(batch);
@@ -232,28 +241,53 @@ export async function parseLogFile(
   };
 
   let bytesRead = startPosition;
+  let leftover = "";
+  let stopped = false;
 
-  for await (const line of rl) {
-    bytesRead += Buffer.byteLength(line, "utf-8") + 1; // +1 for newline
+  // Process one raw line (without its trailing newline). Returns true when the
+  // maxLines limit is reached and parsing should stop.
+  const consumeLine = (raw: string): boolean => {
+    // Count raw bytes + the newline delimiter. Keeping any trailing \r in the
+    // byte count (CRLF logs) keeps the cursor exact; it's stripped before parsing.
+    bytesRead += Buffer.byteLength(raw, "utf-8") + 1;
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
     const entry = parseLine(line);
     if (entry) {
       batch.push(entry);
       lineCount++;
-
       if (batch.length >= BATCH_SIZE) {
-        flushBatch();
+        flushBatch(bytesRead);
         if (onProgress) onProgress({ lines: lineCount, bytesRead, totalBytes: fileSize });
       }
+      if (maxLines && lineCount >= maxLines) return true;
+    }
+    return false;
+  };
 
-      // Stop if we hit the max lines limit (for chunked ingestion)
-      if (maxLines && lineCount >= maxLines) {
+  for await (const chunk of fileStream) {
+    const text = leftover + decoder.write(chunk as Buffer);
+    let start = 0;
+    let nl = text.indexOf("\n");
+    while (nl !== -1) {
+      if (consumeLine(text.slice(start, nl))) {
+        stopped = true;
         break;
       }
+      start = nl + 1;
+      nl = text.indexOf("\n", start);
     }
+    leftover = text.slice(start);
+    if (stopped) break;
   }
 
-  // Flush remaining
-  flushBatch();
+  // Handle a final line without a trailing newline (full read only).
+  if (!stopped) {
+    leftover += decoder.end();
+    if (leftover.length > 0) consumeLine(leftover);
+  }
+
+  // Flush remaining (also advances the cursor atomically with these rows)
+  flushBatch(bytesRead);
 
   // Trim recent_activity to last 1000 entries
   db.prepare(`
@@ -262,9 +296,12 @@ export async function parseLogFile(
     )
   `).run();
 
-  // Update parse position — if we broke early, use bytes read; otherwise file end
-  const finalPosition = (maxLines && lineCount >= maxLines) ? bytesRead : fileSize;
-  updateState.run(finalPosition, fileSize);
+  // Snap the cursor to everything consumed. This covers the case where the final
+  // batch was empty (e.g. trailing non-parseable lines after the last full batch)
+  // so the cursor can't be left short. bytesRead is the offset just past the last
+  // consumed line, so a resume continues exactly here regardless of how the
+  // previous run ended.
+  updateState.run(bytesRead, fileSize);
 
   return lineCount;
 }
