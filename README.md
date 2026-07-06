@@ -258,6 +258,16 @@ Game names, cover images, and related metadata are property of their respective 
 
 ---
 
+## Contributors & Bug Reports
+
+Thanks to everyone who has run this in the wild and helped make it better:
+
+- **[MathewBurnett](https://github.com/MathewBurnett)** — reported and diagnosed the ingestion double-counting bug (parse cursor not advancing atomically per batch, causing replays on crash/restart/overlap to double-count) during a live event.
+
+Found a bug or have an improvement? [Open an issue](https://github.com/imahmud1/lancache-dashboard/issues).
+
+---
+
 ## License
 
 Released under the [MIT License](./LICENSE).
