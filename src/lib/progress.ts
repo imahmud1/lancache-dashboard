@@ -4,6 +4,7 @@
 
 export interface IngestProgress {
   running: boolean;
+  error: boolean;
   lines: number;
   bytesRead: number;
   totalBytes: number;
@@ -26,6 +27,7 @@ export interface DepotProgress {
 
 export const ingestProgress: IngestProgress = {
   running: false,
+  error: false,
   lines: 0,
   bytesRead: 0,
   totalBytes: 0,
