@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, type ReactNode } from "react";
 import Link from "next/link";
-import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw, Radar, ChevronDown, AlertTriangle } from "lucide-react";
+import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw, Radar, ChevronDown, AlertTriangle, CalendarRange } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { ServiceChart } from "@/components/ServiceChart";
 import { BandwidthChart } from "@/components/BandwidthChart";
@@ -13,7 +13,7 @@ import { CachedGames } from "@/components/CachedGames";
 import { CacheSavings } from "@/components/CacheSavings";
 import { RangePanel } from "@/components/RangePanel";
 import { formatBytes, formatNumber } from "@/lib/format";
-import { RangeSelection, ALL_TIME, resolveSelection } from "@/lib/range";
+import { RangeSelection, ALL_TIME, resolveSelection, selectionLabel } from "@/lib/range";
 
 interface DashboardData {
   overview: {
@@ -47,6 +47,7 @@ export default function Dashboard() {
   });
   const [includeAll, setIncludeAll] = useState(false);
   const [selection, setSelection] = useState<RangeSelection>(ALL_TIME);
+  const [rangeOpen, setRangeOpen] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [adminKey, setAdminKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,8 +63,10 @@ export default function Dashboard() {
     const savedToggle = typeof window !== "undefined" ? localStorage.getItem("includeAll") : null;
     const savedKey = typeof window !== "undefined" ? localStorage.getItem("adminKey") : null;
     const savedRange = typeof window !== "undefined" ? localStorage.getItem("rangeSelection") : null;
+    const savedRangeOpen = typeof window !== "undefined" ? localStorage.getItem("rangePanelOpen") : null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedToggle === "1") setIncludeAll(true);
+    if (savedRangeOpen === "1") setRangeOpen(true);
     if (savedKey) setAdminKey(savedKey);
     if (savedRange) {
       try {
@@ -146,6 +149,14 @@ export default function Dashboard() {
   const handleSelectRange = (sel: RangeSelection) => {
     setSelection(sel);
     if (typeof window !== "undefined") localStorage.setItem("rangeSelection", JSON.stringify(sel));
+  };
+
+  const toggleRange = () => {
+    setRangeOpen((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") localStorage.setItem("rangePanelOpen", next ? "1" : "0");
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -269,6 +280,20 @@ export default function Dashboard() {
             >
               {includeAll ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               <span className="hidden md:inline">{includeAll ? "Showing prefill" : "Hiding prefill"}</span>
+            </button>
+
+            <button
+              onClick={toggleRange}
+              title="Time range filter"
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors border min-w-0 ${
+                rangeOpen
+                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"
+                  : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              <CalendarRange className="w-4 h-4 shrink-0" />
+              <span className="hidden md:inline max-w-[12rem] truncate">{selectionLabel(selection)}</span>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${rangeOpen ? "rotate-180" : ""}`} />
             </button>
 
             <Link
@@ -403,8 +428,9 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Time range selector */}
+        {/* Time range selector (toggled from the top-bar Range button) */}
         <RangePanel
+          open={rangeOpen}
           selection={selection}
           onSelect={handleSelectRange}
           canAdmin={canAdmin}

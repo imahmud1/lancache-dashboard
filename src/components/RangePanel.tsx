@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CalendarRange, ChevronDown, ChevronRight, X, Plus } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import {
   RangeSelection,
   SavedRange,
   RELATIVE_PRESETS,
   ALL_TIME,
   resolveSelection,
-  selectionLabel,
   floorToHour,
   hourToLocalInput,
   formatHour,
 } from "@/lib/range";
 
-const OPEN_KEY = "rangePanelOpen";
-
 interface RangePanelProps {
+  /** Controlled open/collapsed state, driven by the top-bar Range button. */
+  open: boolean;
   selection: RangeSelection;
   onSelect: (sel: RangeSelection) => void;
   canAdmin: boolean;
@@ -24,18 +23,11 @@ interface RangePanelProps {
   onAdminRejected?: () => void;
 }
 
-export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdminRejected }: RangePanelProps) {
-  const [open, setOpen] = useState(false);
+export function RangePanel({ open, selection, onSelect, canAdmin, adminHeaders, onAdminRejected }: RangePanelProps) {
   const [saved, setSaved] = useState<SavedRange[]>([]);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
   const [error, setError] = useState("");
-
-  // Restore panel open/collapsed state.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (typeof window !== "undefined") setOpen(localStorage.getItem(OPEN_KEY) === "1");
-  }, []);
 
   const loadSaved = useCallback(() => {
     fetch("/api/ranges")
@@ -56,14 +48,6 @@ export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdmi
       setCustomEnd(hourToLocalInput(selection.end));
     }
   }, [selection]);
-
-  const toggleOpen = () => {
-    setOpen((prev) => {
-      const next = !prev;
-      if (typeof window !== "undefined") localStorage.setItem(OPEN_KEY, next ? "1" : "0");
-      return next;
-    });
-  };
 
   const applyCustom = () => {
     if (!customStart || !customEnd) {
@@ -129,29 +113,13 @@ export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdmi
   const isAll = selection.kind === "all";
   const isCustom = selection.kind === "custom";
 
+  if (!open) return null;
+
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl">
-      {/* Header row (always visible) */}
-      <button
-        onClick={toggleOpen}
-        className="w-full flex items-center justify-between gap-3 px-5 py-3.5 text-left"
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center">
-            <CalendarRange className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-50 leading-none">Range</h3>
-            <p className="text-[11px] text-gray-500 mt-1">{selectionLabel(selection)}</p>
-          </div>
-        </div>
-        {open ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
-      </button>
-
-      {open && (
-        <div className="px-5 pb-4 pt-1 space-y-3 border-t border-gray-800/60">
+      <div className="px-5 pb-4 pt-4 space-y-3">
           {/* Presets */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-3">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Pill active={isAll} onClick={() => onSelect(ALL_TIME)}>All time</Pill>
             {RELATIVE_PRESETS.map((p) => (
               <Pill
@@ -244,8 +212,7 @@ export function RangePanel({ selection, onSelect, canAdmin, adminHeaders, onAdmi
               </button>
             )}
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
