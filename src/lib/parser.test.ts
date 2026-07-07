@@ -115,6 +115,10 @@ describe("extractGameId", () => {
     expect(extractGameId("epicgames", "/Builds/Fortnite/CloudDir/x")).toBe("Fortnite");
   });
 
+  it("returns null for an epic path without a /Builds/ segment", () => {
+    expect(extractGameId("epicgames", "/Downloads/Fortnite/x")).toBeNull();
+  });
+
   it("recognizes known riot games and defaults otherwise", () => {
     expect(extractGameId("riot", "/valorant/patch/x")).toBe("valorant");
     expect(extractGameId("riot", "/LoL/patch/x")).toBe("lol");
