@@ -111,8 +111,8 @@ describe("extractGameId", () => {
     expect(extractGameId("blizzard", "/tpr/wow/data/xx")).toBe("wow");
   });
 
-  it("combines the first two epic path segments", () => {
-    expect(extractGameId("epicgames", "/Builds/Fortnite/CloudDir/x")).toBe("Builds/Fortnite");
+  it("extracts the epic artifact name from the build path", () => {
+    expect(extractGameId("epicgames", "/Builds/Fortnite/CloudDir/x")).toBe("Fortnite");
   });
 
   it("recognizes known riot games and defaults otherwise", () => {
