@@ -1,5 +1,10 @@
 services:
   lancache-dashboard:
+    # Uses the published image by default (`docker compose up -d`, and
+    # `docker compose pull` to update). To build from a local source checkout
+    # instead, run `docker compose up -d --build` — the built image is tagged
+    # with the name below.
+    image: ghcr.io/imahmud1/lancache-dashboard:latest
     build: .
     container_name: lancache-dashboard
     restart: unless-stopped

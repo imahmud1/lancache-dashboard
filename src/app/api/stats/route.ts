@@ -1,23 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOverviewStats, getServiceStats, getDailyBandwidth, getHourlyBandwidthToday } from "@/lib/queries";
+import { getOverviewStats, getServiceStats, getBandwidthSeries, parseTimeRange } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const includeAll = req.nextUrl.searchParams.get("includeAll") === "1";
-    const opts = { includeAll };
+    const sp = req.nextUrl.searchParams;
+    const includeAll = sp.get("includeAll") === "1";
+    const range = parseTimeRange(sp.get("start"), sp.get("end"));
+    const opts = { includeAll, range };
 
     const overview = getOverviewStats(opts);
     const services = getServiceStats(20, opts);
-    const dailyBandwidth = getDailyBandwidth(30, opts);
-    const hourlyToday = getHourlyBandwidthToday();
+    const { granularity, points } = getBandwidthSeries(opts);
 
     return NextResponse.json({
       overview,
       services,
-      dailyBandwidth,
-      hourlyToday,
+      bandwidth: points,
+      bandwidthGranularity: granularity,
     });
   } catch (error) {
     console.error("Error fetching stats:", error);

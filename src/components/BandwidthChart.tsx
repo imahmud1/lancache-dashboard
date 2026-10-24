@@ -5,19 +5,17 @@ import { TrendingUp } from "lucide-react";
 import { formatBytes } from "@/lib/format";
 import { SectionHeader } from "./SectionHeader";
 
-interface DailyData {
-  day: string;
+interface BandwidthDatum {
+  bucket: string; // "2026-07-01" (day) or "2026-07-01T18" (hour)
   bytesSent: number;
-  requests: number;
-  cacheHits: number;
-  cacheMisses: number;
   hitBytes: number;
   missBytes: number;
 }
 
-export function BandwidthChart({ data }: { data: DailyData[] }) {
+export function BandwidthChart({ data, granularity = "day" }: { data: BandwidthDatum[]; granularity?: "hour" | "3h" | "day" }) {
+  const hourly = granularity === "hour" || granularity === "3h";
   const chartData = data.map((d) => ({
-    label: d.day.slice(5),
+    label: hourly ? `${d.bucket.slice(11)}:00` : d.bucket.slice(5),
     fromCache: d.hitBytes,
     fromUpstream: d.missBytes,
     total: d.bytesSent,
@@ -28,7 +26,12 @@ export function BandwidthChart({ data }: { data: DailyData[] }) {
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 h-full">
-      <SectionHeader icon={TrendingUp} title="Daily Bandwidth" subtitle="Cache vs internet over 30 days" accent="blue">
+      <SectionHeader
+        icon={TrendingUp}
+        title="Bandwidth"
+        subtitle={granularity === "hour" ? "Hourly (UTC) · cache vs internet" : granularity === "3h" ? "Every 3h (UTC) · cache vs internet" : "Daily (UTC) · cache vs internet"}
+        accent="blue"
+      >
         <div className="flex items-center gap-3">
           <Legend color="#22c55e" label="Cache" value={formatBytes(totalCache)} />
           <Legend color="#f59e0b" label="Internet" value={formatBytes(totalUpstream)} />

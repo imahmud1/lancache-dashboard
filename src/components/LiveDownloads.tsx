@@ -38,6 +38,18 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
   const [peakBps, setPeakBps] = useState(0);
   const [unit, setUnit] = useState<SpeedUnit>("bytes");
 
+  // Restore the persisted unit preference.
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("speedUnit") : null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved === "bits" || saved === "bytes") setUnit(saved);
+  }, []);
+
+  const chooseUnit = (u: SpeedUnit) => {
+    setUnit(u);
+    if (typeof window !== "undefined") localStorage.setItem("speedUnit", u);
+  };
+
   useEffect(() => {
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
@@ -77,7 +89,7 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
         {/* Unit toggle */}
         <div className="flex items-center gap-1 p-1 bg-gray-950/50 border border-gray-700/60 rounded-lg">
           <button
-            onClick={() => setUnit("bits")}
+            onClick={() => chooseUnit("bits")}
             className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
               unit === "bits" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
             }`}
@@ -85,7 +97,7 @@ export function LiveDownloads({ includeAll = false }: { includeAll?: boolean }) 
             bit/s
           </button>
           <button
-            onClick={() => setUnit("bytes")}
+            onClick={() => chooseUnit("bytes")}
             className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
               unit === "bytes" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
             }`}

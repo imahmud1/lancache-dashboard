@@ -54,3 +54,16 @@ pics_depot_mappings.json
 pics_meta.json
 steam-depots.json
 steam-apps.json
+
+#somewhere to put invesitgation files
+examples/
+
+# claude code skills
+.claude/
+skills-lock.json
+docs/agents/domain.md
+docs/agents/issue-tracker.md
+docs/agents/triage-labels.md
+
+# local ADRs (kept out of version control)
+docs/adr/

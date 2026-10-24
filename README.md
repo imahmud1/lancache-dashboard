@@ -16,6 +16,9 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 ### Stats Overview
 ![Stats Overview](docs/screenshots/stats-cards.png)
 
+### Time Range Filter
+![Time Range Filter](docs/screenshots/date-picker.png)
+
 ### Live Downloads
 ![Live Downloads](docs/screenshots/live-downloads.png)
 
@@ -47,6 +50,7 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 - **Per-service breakdown** — Bandwidth, requests, cache savings, and hit rate for each platform (Steam, Epic, Battle.net, Riot, WSUS, etc.), as cards or a donut chart.
 - **Top clients leaderboard** — Which machines pulled the most, how much they saved from cache, and their hit rate.
 - **Daily bandwidth trend** — A 30-day stacked chart of cache vs internet traffic.
+- **Time range filter** — Scope every stat, chart, and table to a window: quick relative presets (last 6h through 30d), a custom UTC from/to range, or your own saved presets shared across viewers. Lives as a compact button in the top bar that expands to the full picker.
 - **Automatic ingestion** — New log lines are parsed every 60 seconds. Handles log rotation automatically.
 - **Status Check page** — A standalone `/status` checker that tests, from the visitor's own browser, whether their network is routing supported services through a LanCache. Useful for sharing with users on your network. *(See [Status Check](#status-check) below.)*
 - **Tiny footprint** — Hundreds of GB of logs aggregate down to a SQLite DB measured in megabytes.
@@ -75,11 +79,13 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
    mkdir -p data && sudo chown -R 1001:1001 data
    ```
 
-4. Start it:
+4. Start it (pulls the prebuilt image from GHCR):
 
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    ```
+
+   To grab a newer release later, run `docker compose pull && docker compose up -d`.
 
 5. Open `http://your-server-ip:3000`
 

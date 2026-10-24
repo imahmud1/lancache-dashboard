@@ -95,6 +95,16 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cached_games_service ON cached_games(service);
     CREATE INDEX IF NOT EXISTS idx_cached_games_bytes ON cached_games(total_bytes DESC);
 
+    -- Shared, named absolute time-range presets (e.g. a LAN event's opening hours).
+    -- start/end are hour strings (YYYY-MM-DDTHH) in log-local wall-clock; end is exclusive.
+    CREATE TABLE IF NOT EXISTS saved_ranges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      start TEXT NOT NULL,
+      end TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     -- Initialize parse state if not exists
     INSERT OR IGNORE INTO parse_state (id, last_position, last_file_size, updated_at)
     VALUES (1, 0, 0, datetime('now'));
