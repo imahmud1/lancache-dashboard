@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateGameName } from "@/lib/queries";
+import { updateGameName, getStoredImageUrl } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +34,13 @@ export async function GET(req: NextRequest) {
       const img: string | undefined = entry?.data?.header_image || entry?.data?.capsule_image;
       if (img) {
         imageCache.set(appId, img);
-        // Persist so future loads use the working URL directly
+        // Persist so future loads use the working URL directly. This endpoint is
+        // open to every viewer, so only write when the depot is already mapped to
+        // this same app; otherwise any caller could rename an arbitrary depot by
+        // pairing it with an unrelated appId.
         const name: string | undefined = entry?.data?.name;
-        if (depotId && name) {
+        const stored = depotId ? getStoredImageUrl("steam", depotId) : null;
+        if (depotId && name && stored && stored.includes(`/apps/${appId}/`)) {
           updateGameName("steam", depotId, name, img);
         }
         return NextResponse.json({ imageUrl: img });

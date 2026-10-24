@@ -3,6 +3,8 @@ import { getCachedGames, updateGameName } from "@/lib/queries";
 import { resolveDepotBatch, getResolvedDepots } from "@/lib/steam-resolver";
 import { resolveBattleNetGame, getBattleNetImageUrl } from "@/lib/battlenet-resolver";
 import { resolveEpicName } from "@/lib/epic-resolver";
+import { getGameOverride } from "@/lib/game-overrides";
+import { fixSteamImages, knownReplacement } from "@/lib/steam-image-fix";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +42,13 @@ export async function GET() {
       .filter((g) => g.service === "steam" && (!g.gameName || g.gameName.startsWith("Depot ")))
       .map((g) => g.gameId);
 
-    // Apply any already-cached resolutions instantly (no network)
+    // Apply any already-cached resolutions instantly (no network). Only fill
+    // gaps: a row that already has a name + image in the DB may hold a corrected
+    // image URL (see /api/games/image), which the depot cache must not clobber.
     const resolved = getResolvedDepots();
     for (const game of games) {
-      if (game.service === "steam" && resolved[game.gameId]) {
+      const needsFill = !game.gameName || game.gameName.startsWith("Depot ") || !game.imageUrl;
+      if (game.service === "steam" && needsFill && resolved[game.gameId]) {
         const info = resolved[game.gameId];
         if (info.appName && !info.appName.startsWith("Depot ")) {
           game.gameName = info.appName;
@@ -84,6 +89,23 @@ export async function GET() {
         game.gameName = resolveEpicName(game.gameId);
       }
     }
+
+    // Operator overrides (data/game-overrides.json) win over built-in resolution.
+    for (const game of games) {
+      const o = getGameOverride(game.service, game.gameId);
+      if (o?.name) game.gameName = o.name;
+      if (o?.image) game.imageUrl = o.image;
+    }
+
+    // Steam serves a grey placeholder (HTTP 200) for some unhashed header URLs.
+    // Use any replacement already found, and check the rest in the background.
+    for (const game of games) {
+      if (game.service === "steam" && game.imageUrl) {
+        const fixed = knownReplacement(game.imageUrl);
+        if (fixed) game.imageUrl = fixed;
+      }
+    }
+    void fixSteamImages(games);
 
     // Deduplicate: multiple depots for the same game should be merged
     const merged = mergeByApp(games);
