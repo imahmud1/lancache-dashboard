@@ -278,45 +278,45 @@ export default function StatusPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-80 bg-gradient-to-b from-emerald-500/[0.06] to-transparent" />
-
-      {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-gray-800/80 bg-gray-950/70 backdrop-blur-xl">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-ground text-ink">
+      {/* Header: same chrome as the dashboard */}
+      <header className="sticky top-0 z-20 border-b border-line bg-ground/85 backdrop-blur-md">
+        <div className="max-w-5xl mx-auto px-5 min-h-16 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Radar className="w-5 h-5 text-white" />
-            </div>
+            <span className="w-9 h-9 rounded-lg bg-accent/12 text-accent flex items-center justify-center" aria-hidden>
+              <Radar className="w-5 h-5" />
+            </span>
             <div>
-              <h1 className="text-lg font-bold leading-none">Status Check</h1>
-              <p className="text-[11px] text-gray-500 mt-0.5">Is this network using the cache?</p>
+              <h1 className="text-base font-semibold leading-tight text-ink">Status check</h1>
+              <p className="text-xs text-ink-3 mt-0.5">Is this network using the cache?</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-400 hover:text-gray-200 rounded-xl border border-gray-800 hover:border-gray-700 transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Dashboard</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/" className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-panel text-[13px] font-medium text-ink-2 hover:text-ink hover:border-line-strong transition-colors">
+              <ArrowLeft className="w-4 h-4" aria-hidden />
+              <span>Dashboard</span>
             </Link>
             <button
               onClick={() => setLive((v) => !v)}
+              aria-pressed={live}
               title={live ? `Live: re-checking every ${intervalSec}s` : "Auto re-check while this page is open"}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                live ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
+              className={`inline-flex items-center gap-2 h-9 px-3 rounded-lg text-[13px] font-medium border transition-colors ${
+                live ? "bg-accent/10 border-accent/40 text-ink" : "bg-panel border-line text-ink-2 hover:text-ink hover:border-line-strong"
               }`}
             >
               <span className={`relative flex h-2 w-2 ${live ? "" : "opacity-50"}`}>
-                {live && <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />}
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${live ? "bg-emerald-400" : "bg-gray-500"}`} />
+                {live && <span className="absolute inline-flex h-full w-full rounded-full bg-accent opacity-75 animate-ping" />}
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${live ? "bg-accent" : "bg-ink-3"}`} />
               </span>
-              <span className="hidden sm:inline">Live</span>
+              <span>Live</span>
             </button>
             {live && (
               <select
                 value={intervalSec}
                 onChange={(e) => setIntervalSec(Number(e.target.value))}
+                aria-label="Re-check interval"
                 title="How often to re-check while Live"
-                className="px-2.5 py-2 bg-gray-800 border border-gray-700 rounded-xl text-sm text-gray-300 focus:outline-none focus:border-gray-600 cursor-pointer"
+                className="h-9 px-2.5 bg-panel border border-line rounded-lg text-[13px] text-ink focus:outline-none focus:border-accent/60 cursor-pointer"
               >
                 {INTERVAL_OPTIONS.map((s) => (
                   <option key={s} value={s}>{s}s</option>
@@ -326,9 +326,9 @@ export default function StatusPage() {
             <button
               onClick={runChecks}
               disabled={running || loading}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-800 disabled:text-gray-500 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-emerald-600/20 disabled:shadow-none"
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-[13px] font-semibold text-ground bg-accent hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              <RefreshCw className={`w-4 h-4 ${running ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-4 h-4 ${running ? "animate-spin" : ""}`} aria-hidden />
               {running ? "Testing…" : "Re-run"}
             </button>
           </div>
@@ -348,13 +348,13 @@ export default function StatusPage() {
         />
 
         {isHttps && (
-          <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25">
-            <TriangleAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-internet/10 border border-internet/25">
+            <TriangleAlert className="w-5 h-5 text-internet shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold text-amber-300">This page is loaded over HTTPS</p>
-              <p className="text-amber-200/70 mt-0.5">
+              <p className="font-semibold text-internet">This page is loaded over HTTPS</p>
+              <p className="text-internet/70 mt-0.5">
                 Browsers block secure pages from reaching the cache&apos;s plain-HTTP heartbeat, so results below may read as
-                unresolved even when the cache works. Open this page over <span className="font-mono text-amber-200">http://</span> for accurate results.
+                unresolved even when the cache works. Open this page over <span className="font-mono text-internet">http://</span> for accurate results.
               </p>
             </div>
           </div>
@@ -369,10 +369,10 @@ export default function StatusPage() {
         </div>
 
         {/* Custom domain test */}
-        <div className="rounded-2xl bg-gray-900/60 border border-gray-800 p-5">
+        <div className="rounded-xl bg-panel/60 border border-line p-5">
           <div className="flex items-center gap-2 mb-3">
-            <Zap className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-gray-200">Test any domain</h3>
+            <Zap className="w-4 h-4 text-cache" />
+            <h3 className="text-sm font-semibold text-ink">Test any domain</h3>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
@@ -381,12 +381,12 @@ export default function StatusPage() {
               value={customDomain}
               onChange={(e) => setCustomDomain(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCustomCheck()}
-              className="flex-1 px-4 py-2.5 bg-gray-950/60 border border-gray-700 rounded-xl text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50"
+              className="flex-1 px-4 py-2.5 bg-ground/60 border border-line-strong rounded-xl text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-cache/30 focus:border-cache/50"
             />
             <button
               onClick={handleCustomCheck}
               disabled={customChecking}
-              className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 disabled:opacity-60 rounded-xl text-sm font-medium transition-colors"
+              className="px-6 py-2.5 bg-raised hover:bg-line-strong border border-line-strong disabled:opacity-60 rounded-xl text-sm font-medium transition-colors"
             >
               {customChecking ? "Testing…" : "Test"}
             </button>
@@ -395,17 +395,17 @@ export default function StatusPage() {
             <div
               className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm rounded-xl px-3 py-2.5 border ${
                 customResult.ok
-                  ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/25"
-                  : "text-rose-300 bg-rose-500/10 border-rose-500/25"
+                  ? "text-cache bg-cache/10 border-cache/25"
+                  : "text-danger bg-danger/10 border-danger/25"
               }`}
             >
               {customResult.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <XCircle className="w-4 h-4 shrink-0" />}
               <span className="font-mono text-[13px]">{customResult.domain}</span>
-              <span className="text-gray-500">·</span>
+              <span className="text-ink-3">·</span>
               <span>{customResult.ok ? "Resolved through LanCache" : "Not routed through LanCache"}</span>
-              <span className="ml-auto flex items-center gap-3 text-[11px] text-gray-500">
+              <span className="ml-auto flex items-center gap-3 text-[11px] text-ink-3">
                 <span>{customResult.ms} ms</span>
-                {customResult.ok && customResult.host && <span className="font-mono text-emerald-400/80 truncate max-w-[160px]">{customResult.host}</span>}
+                {customResult.ok && customResult.host && <span className="font-mono text-cache/80 truncate max-w-[160px]">{customResult.host}</span>}
               </span>
             </div>
           )}
@@ -416,16 +416,16 @@ export default function StatusPage() {
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
             <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" />
               <input
                 type="text"
                 placeholder="Filter services or domains…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-gray-900/60 border border-gray-800 rounded-xl text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-700"
+                className="w-full pl-9 pr-3 py-2 bg-panel/60 border border-line rounded-xl text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-line-strong"
               />
             </div>
-            <div className="flex items-center gap-1 p-1 bg-gray-900/60 border border-gray-800 rounded-xl overflow-x-auto">
+            <div className="flex items-center gap-1 p-1 bg-panel/60 border border-line rounded-xl overflow-x-auto">
               <FilterChip active={filter === "all"} onClick={() => setFilter("all")} label="All" count={services.length} />
               <FilterChip active={filter === "resolved"} onClick={() => setFilter("resolved")} label="Resolved" count={summary.resolved} tone="emerald" />
               <FilterChip active={filter === "partial"} onClick={() => setFilter("partial")} label="Partial" count={summary.partial} tone="amber" />
@@ -435,26 +435,26 @@ export default function StatusPage() {
               onClick={toggleAll}
               disabled={filtered.length === 0}
               title={allExpanded ? "Collapse all" : "Expand all"}
-              className="flex items-center gap-1.5 px-3 py-2 bg-gray-900/60 border border-gray-800 hover:border-gray-700 disabled:opacity-50 rounded-xl text-[12px] font-medium text-gray-400 hover:text-gray-200 transition-colors whitespace-nowrap"
+              className="flex items-center gap-1.5 px-3 py-2 bg-panel/60 border border-line hover:border-line-strong disabled:opacity-50 rounded-xl text-[12px] font-medium text-ink-2 hover:text-ink transition-colors whitespace-nowrap"
             >
               {allExpanded ? <ChevronsDownUp className="w-3.5 h-3.5" /> : <ChevronsUpDown className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{allExpanded ? "Collapse" : "Expand"} all</span>
             </button>
-            <div className="flex items-center rounded-xl bg-gray-900/60 border border-gray-800 overflow-hidden">
+            <div className="flex items-center rounded-xl bg-panel/60 border border-line overflow-hidden">
               <button
                 onClick={copyReport}
                 disabled={!hasRun}
                 title="Copy a text report of these results"
-                className="flex items-center gap-1.5 px-3 py-2 hover:bg-gray-800/60 disabled:opacity-50 text-[12px] font-medium text-gray-400 hover:text-gray-200 transition-colors whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-2 hover:bg-raised/60 disabled:opacity-50 text-[12px] font-medium text-ink-2 hover:text-ink transition-colors whitespace-nowrap"
               >
-                {reportCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <ClipboardList className="w-3.5 h-3.5" />}
+                {reportCopied ? <Check className="w-3.5 h-3.5 text-cache" /> : <ClipboardList className="w-3.5 h-3.5" />}
                 <span className="hidden sm:inline">{reportCopied ? "Copied" : "Copy report"}</span>
               </button>
               <button
                 onClick={downloadReport}
                 disabled={!hasRun}
                 title="Download report as a .txt file"
-                className="flex items-center px-2.5 py-2 border-l border-gray-800 hover:bg-gray-800/60 disabled:opacity-50 text-gray-400 hover:text-gray-200 transition-colors"
+                className="flex items-center px-2.5 py-2 border-l border-line hover:bg-raised/60 disabled:opacity-50 text-ink-2 hover:text-ink transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
               </button>
@@ -463,17 +463,17 @@ export default function StatusPage() {
 
           {/* List */}
           {loading ? (
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/40 divide-y divide-gray-800/70 overflow-hidden">
+            <div className="rounded-xl border border-line bg-panel/40 divide-y divide-line/70 overflow-hidden">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="h-16 animate-pulse" />
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-10 text-center text-sm text-gray-500">
+            <div className="rounded-xl border border-line bg-panel/40 p-10 text-center text-sm text-ink-3">
               No services match your filter.
             </div>
           ) : (
-            <div className="rounded-2xl border border-gray-800 bg-gray-900/40 divide-y divide-gray-800/70 overflow-hidden">
+            <div className="rounded-xl border border-line bg-panel/40 divide-y divide-line/70 overflow-hidden">
               {filtered.map((s) => (
                 <ServiceRow
                   key={s.key}
@@ -485,29 +485,29 @@ export default function StatusPage() {
               ))}
             </div>
           )}
-          <p className="mt-3 text-[11px] text-gray-600 text-center">
+          <p className="mt-3 text-[11px] text-ink-3 text-center">
             Domain list sourced from{" "}
-            <a href="https://github.com/uklans/cache-domains" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 underline underline-offset-2 transition-colors">
+            <a href="https://github.com/uklans/cache-domains" target="_blank" rel="noopener noreferrer" className="text-ink-3 hover:text-ink underline underline-offset-2 transition-colors">
               uklans/cache-domains
             </a>
           </p>
         </div>
 
         {/* How it works */}
-        <div className="rounded-2xl bg-gray-900/40 border border-gray-800/70 p-5 text-sm text-gray-400 leading-relaxed">
-          <p className="font-semibold text-gray-300 mb-1.5">How this works</p>
+        <div className="rounded-xl bg-panel/40 border border-line/70 p-5 text-sm text-ink-2 leading-relaxed">
+          <p className="font-semibold text-ink mb-1.5">How this works</p>
           <p>
             {"Your browser sends a tiny "}
-            <span className="font-mono text-gray-300">/lancache-heartbeat</span>
+            <span className="font-mono text-ink">/lancache-heartbeat</span>
             {" request to each CDN hostname. If this network's DNS points that hostname at a LanCache server, the cache replies with a special HTTP "}
-            <span className="font-mono text-gray-300">204</span>
+            <span className="font-mono text-ink">204</span>
             {" and identifies itself — that counts as "}
-            <span className="text-emerald-400 font-medium">Resolved</span>
+            <span className="text-cache font-medium">Resolved</span>
             {". A real CDN has no such endpoint, so the request is rejected and shows as "}
-            <span className="text-rose-400 font-medium">Unresolved</span>
+            <span className="text-danger font-medium">Unresolved</span>
             {". Resolved means traffic for that service is being intercepted by the cache; it does not measure what is currently stored on disk."}
           </p>
-          <p className="mt-2.5 text-gray-500">
+          <p className="mt-2.5 text-ink-3">
             {"Every check runs entirely in your browser against your own connection, so the results reflect the network you're on right now — not the server hosting this page. Nothing is measured or stored server-side."}
           </p>
         </div>
@@ -538,29 +538,29 @@ function VerdictHero({
   const config = {
     active: {
       icon: ShieldCheck,
-      ring: "from-emerald-500/25 to-emerald-500/0",
-      iconBg: "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30",
+      tint: "bg-cache/[0.07] border-cache/30",
+      iconBg: "bg-cache/15 text-cache ring-cache/30",
       title: "LanCache is active on this network",
       sub: "Supported services are being intercepted and cached.",
     },
     partial: {
       icon: ShieldAlert,
-      ring: "from-amber-500/25 to-amber-500/0",
-      iconBg: "bg-amber-500/15 text-amber-400 ring-amber-500/30",
+      tint: "bg-internet/[0.07] border-internet/30",
+      iconBg: "bg-internet/15 text-internet ring-internet/30",
       title: "LanCache is partially active",
       sub: "Some services resolve to the cache while others go straight to the internet.",
     },
     none: {
       icon: ShieldOff,
-      ring: "from-rose-500/25 to-rose-500/0",
-      iconBg: "bg-rose-500/15 text-rose-400 ring-rose-500/30",
+      tint: "bg-danger/[0.07] border-danger/30",
+      iconBg: "bg-danger/15 text-danger ring-danger/30",
       title: "No LanCache detected",
       sub: "This network isn't routing supported services through a cache.",
     },
     pending: {
       icon: Radar,
-      ring: "from-gray-500/20 to-gray-500/0",
-      iconBg: "bg-gray-700/40 text-gray-300 ring-gray-600/40",
+      tint: "bg-panel border-line",
+      iconBg: "bg-line-strong/40 text-ink ring-line-strong/40",
       title: running ? "Testing this network…" : "Ready to test",
       sub: "Checking each supported CDN hostname from your browser.",
     },
@@ -570,18 +570,17 @@ function VerdictHero({
   const showCounts = verdict === "active" || verdict === "partial";
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-gray-800 bg-gray-900/60 p-6 sm:p-7">
-      <div className={`pointer-events-none absolute -top-24 -right-16 h-64 w-64 rounded-full bg-gradient-to-br ${config.ring} blur-2xl`} />
+    <div className={`relative overflow-hidden rounded-xl border p-6 sm:p-7 transition-colors duration-500 ${config.tint}`}>
       <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
-        <div className={`w-16 h-16 rounded-2xl ring-1 flex items-center justify-center shrink-0 ${config.iconBg}`}>
+        <div className={`w-16 h-16 rounded-xl ring-1 flex items-center justify-center shrink-0 ${config.iconBg}`}>
           <Icon className={`w-8 h-8 ${running ? "animate-pulse" : ""}`} />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">{config.title}</h2>
-          <p className="text-sm text-gray-400 mt-1">{config.sub}</p>
+          <h2 className="text-xl sm:text-2xl font-semibold tracking-[-0.01em] text-ink">{config.title}</h2>
+          <p className="text-sm text-ink-2 mt-1">{config.sub}</p>
           {lastRun && (
-            <p className="text-[11px] text-gray-600 mt-3">
-              checked {lastRun.toLocaleTimeString()}
+            <p className="text-[11px] text-ink-3 mt-3">
+              Checked {lastRun.toLocaleTimeString()}
               {durationMs != null && ` · ${(durationMs / 1000).toFixed(1)}s`}
             </p>
           )}
@@ -600,11 +599,11 @@ function VerdictHero({
 function Counter({ value, total, label }: { value: number; total: number; label: string }) {
   return (
     <div className="sm:text-right">
-      <div className="text-3xl font-bold text-white leading-none">
+      <div className="figure text-4xl font-semibold text-ink leading-none">
         {value}
-        <span className="text-lg text-gray-500 font-medium">/{total}</span>
+        <span className="text-lg text-ink-3 font-medium">/{total}</span>
       </div>
-      <p className="text-[11px] text-gray-500 mt-1 uppercase tracking-wide">{label}</p>
+      <p className="text-[11px] text-ink-3 mt-1">{label}</p>
     </div>
   );
 }
@@ -625,16 +624,16 @@ function InfoTile({
   loading?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-gray-900/60 border border-gray-800 p-4">
-      <div className="flex items-center gap-2 text-[11px] text-gray-500 uppercase tracking-wide mb-2">
+    <div className="rounded-xl bg-panel/60 border border-line p-4">
+      <div className="flex items-center gap-2 text-[11px] text-ink-3 mb-2">
         <Icon className="w-3.5 h-3.5" /> {label}
       </div>
       {loading ? (
-        <div className="h-4 w-24 rounded bg-gray-800 animate-pulse" />
+        <div className="h-4 w-24 rounded bg-raised animate-pulse" />
       ) : (
-        <div className={`text-sm text-gray-100 truncate ${mono ? "font-mono" : "font-semibold"}`}>{value}</div>
+        <div className={`text-sm text-ink truncate ${mono ? "font-mono" : "font-semibold"}`}>{value}</div>
       )}
-      {sub && !loading && <div className="text-[11px] text-gray-600 mt-0.5">{sub}</div>}
+      {sub && !loading && <div className="text-[11px] text-ink-3 mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -656,30 +655,30 @@ function CacheResponseTile({ host, instances, loading }: { host?: string; instan
     });
   };
 
-  const accent = host ? "bg-emerald-500/[0.07] border-emerald-500/25" : "bg-gray-900/60 border-gray-800";
-  const iconColor = host ? "text-emerald-400/90" : "text-gray-500";
+  const accent = host ? "bg-cache/[0.07] border-cache/25" : "bg-panel/60 border-line";
+  const iconColor = host ? "text-cache/90" : "text-ink-3";
 
   return (
-    <div className={`rounded-2xl border p-4 ${accent}`}>
-      <div className={`flex items-center gap-2 text-[11px] uppercase tracking-wide mb-2 ${iconColor}`}>
+    <div className={`rounded-xl border p-4 ${accent}`}>
+      <div className={`flex items-center gap-2 text-[11px] mb-2 ${iconColor}`}>
         <Server className="w-3.5 h-3.5" /> Cache response
       </div>
       {loading ? (
-        <div className="h-4 w-24 rounded bg-gray-800 animate-pulse" />
+        <div className="h-4 w-24 rounded bg-raised animate-pulse" />
       ) : host ? (
         <>
-          <div className="text-sm font-semibold text-emerald-300">
+          <div className="text-sm font-semibold text-cache">
             Confirmed{instances > 1 ? ` · ${instances} nodes` : ""}
           </div>
           <button onClick={copy} className="group mt-0.5 flex items-center gap-1.5 max-w-full" title="Copy cache ID">
-            <span className="font-mono text-[11px] text-gray-500 truncate group-hover:text-gray-400">{host}</span>
-            {copied ? <Check className="w-3 h-3 text-emerald-400 shrink-0" /> : <Copy className="w-3 h-3 text-gray-600 group-hover:text-gray-400 shrink-0" />}
+            <span className="font-mono text-[11px] text-ink-3 truncate group-hover:text-ink-2">{host}</span>
+            {copied ? <Check className="w-3 h-3 text-cache shrink-0" /> : <Copy className="w-3 h-3 text-ink-3 group-hover:text-ink-2 shrink-0" />}
           </button>
         </>
       ) : (
         <>
-          <div className="text-sm font-semibold text-gray-400">Not detected</div>
-          <div className="text-[11px] text-gray-600 mt-0.5">no heartbeat came back</div>
+          <div className="text-sm font-semibold text-ink-2">Not detected</div>
+          <div className="text-[11px] text-ink-3 mt-0.5">no heartbeat came back</div>
         </>
       )}
     </div>
@@ -687,17 +686,17 @@ function CacheResponseTile({ host, instances, loading }: { host?: string; instan
 }
 
 function FilterChip({ active, onClick, label, count, tone }: { active: boolean; onClick: () => void; label: string; count: number; tone?: "emerald" | "amber" | "rose" }) {
-  const dot = tone === "emerald" ? "bg-emerald-400" : tone === "amber" ? "bg-amber-400" : tone === "rose" ? "bg-rose-400" : "bg-gray-500";
+  const dot = tone === "emerald" ? "bg-cache" : tone === "amber" ? "bg-internet" : tone === "rose" ? "bg-danger" : "bg-ink-3";
   return (
     <button
       onClick={onClick}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium whitespace-nowrap transition-colors ${
-        active ? "bg-gray-700 text-white" : "text-gray-400 hover:text-gray-200"
+        active ? "bg-line-strong text-ink" : "text-ink-2 hover:text-ink"
       }`}
     >
       {tone && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
       {label}
-      <span className={`text-[10px] ${active ? "text-gray-300" : "text-gray-600"}`}>{count}</span>
+      <span className={`text-[10px] ${active ? "text-ink" : "text-ink-3"}`}>{count}</span>
     </button>
   );
 }
@@ -720,10 +719,10 @@ function ServiceRow({
   const color = getServiceColor(service.key);
 
   const badge = {
-    loading: { label: "Checking", cls: "text-gray-400 bg-gray-800/70", dot: "bg-gray-500 animate-pulse", bar: "bg-gray-600" },
-    resolved: { label: "Resolved", cls: "text-emerald-300 bg-emerald-500/10", dot: "bg-emerald-400", bar: "bg-emerald-500" },
-    partial: { label: "Partial", cls: "text-amber-300 bg-amber-500/10", dot: "bg-amber-400", bar: "bg-amber-500" },
-    unresolved: { label: "Unresolved", cls: "text-rose-300 bg-rose-500/10", dot: "bg-rose-400", bar: "bg-rose-500" },
+    loading: { label: "Checking", cls: "text-ink-2 bg-raised/70", dot: "bg-ink-3 animate-pulse", bar: "bg-line-strong" },
+    resolved: { label: "Resolved", cls: "text-cache bg-cache/10", dot: "bg-cache", bar: "bg-cache" },
+    partial: { label: "Partial", cls: "text-internet bg-internet/10", dot: "bg-internet", bar: "bg-internet" },
+    unresolved: { label: "Unresolved", cls: "text-danger bg-danger/10", dot: "bg-danger", bar: "bg-danger" },
   }[status];
 
   const domains: DomainResult[] = result?.domains.length
@@ -731,26 +730,26 @@ function ServiceRow({
     : service.domains.map((d) => ({ domain: d, ok: false, ms: 0 }));
 
   return (
-    <div className={expanded ? "bg-gray-900/70" : ""}>
-      <button onClick={onToggle} className="w-full flex items-center gap-3 sm:gap-4 px-4 py-3 text-left hover:bg-gray-800/30 transition-colors">
+    <div className={expanded ? "bg-panel/70" : ""}>
+      <button onClick={onToggle} className="w-full flex items-center gap-3 sm:gap-4 px-4 py-3 text-left hover:bg-raised/30 transition-colors">
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0"
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-ink shrink-0"
           style={{ backgroundColor: color }}
         >
           {service.label.charAt(0).toUpperCase()}
         </div>
 
         <div className="min-w-0 flex-1">
-          <h4 className="text-sm font-semibold text-gray-100 truncate">{service.label}</h4>
-          <p className="text-[11px] text-gray-500 truncate">{service.description}</p>
+          <h4 className="text-sm font-semibold text-ink truncate">{service.label}</h4>
+          <p className="text-[11px] text-ink-3 truncate">{service.description}</p>
         </div>
 
         {/* Progress track */}
         <div className="hidden md:flex items-center gap-2.5 w-40 shrink-0">
-          <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
+          <div className="flex-1 h-1.5 rounded-full bg-raised overflow-hidden">
             <div className={`h-full rounded-full ${badge.bar} transition-all duration-500`} style={{ width: `${status === "loading" ? 40 : Math.max(pct, working > 0 ? 6 : 0)}%` }} />
           </div>
-          <span className="text-[11px] text-gray-500 w-9 text-right tabular-nums">{working}/{total}</span>
+          <span className="text-[11px] text-ink-3 w-9 text-right tabular-nums">{working}/{total}</span>
         </div>
 
         {/* Status badge */}
@@ -759,28 +758,28 @@ function ServiceRow({
           {badge.label}
         </span>
 
-        <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform shrink-0 ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight className={`w-4 h-4 text-ink-3 transition-transform shrink-0 ${expanded ? "rotate-90" : ""}`} />
       </button>
 
       {expanded && (
-        <div className="bg-gray-950/40 border-t border-gray-800/60">
-          <div className="hidden sm:flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-wide text-gray-600 border-b border-gray-800/50">
+        <div className="bg-ground/40 border-t border-line/60">
+          <div className="hidden sm:flex items-center gap-3 px-4 py-2 text-[10px] text-ink-3 border-b border-line/50">
             <span className="w-2" />
             <span className="flex-1">Domain</span>
             <span className="w-16 text-right">Latency</span>
             <span className="w-24 text-right">Status</span>
           </div>
           {domains.map((d) => (
-            <div key={d.domain} className="flex items-center gap-3 px-4 py-2 border-b border-gray-800/30 last:border-0">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${status === "loading" ? "bg-gray-600 animate-pulse" : d.ok ? "bg-emerald-400" : "bg-rose-400"}`} />
+            <div key={d.domain} className="flex items-center gap-3 px-4 py-2 border-b border-line/30 last:border-0">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${status === "loading" ? "bg-line-strong animate-pulse" : d.ok ? "bg-cache" : "bg-danger"}`} />
               <span
-                className="font-mono text-[12px] text-gray-300 truncate flex-1"
+                className="font-mono text-[12px] text-ink truncate flex-1"
                 title={d.target && d.target !== d.domain ? `tested: ${d.target}` : d.domain}
               >
                 {d.domain}
               </span>
-              <span className="hidden sm:block w-16 text-right text-[11px] text-gray-500 tabular-nums">{status === "loading" ? "…" : d.ok ? `${d.ms} ms` : "—"}</span>
-              <span className={`w-24 text-right text-[11px] ${status === "loading" ? "text-gray-500" : d.ok ? "text-emerald-400" : "text-rose-400/80"}`}>
+              <span className="hidden sm:block w-16 text-right text-[11px] text-ink-3 tabular-nums">{status === "loading" ? "…" : d.ok ? `${d.ms} ms` : "—"}</span>
+              <span className={`w-24 text-right text-[11px] ${status === "loading" ? "text-ink-3" : d.ok ? "text-cache" : "text-danger/80"}`}>
                 {status === "loading" ? "checking" : d.ok ? "resolved" : d.reason ?? "unresolved"}
               </span>
             </div>
