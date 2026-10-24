@@ -18,8 +18,9 @@ export interface ParsedLogEntry {
 
 // Log format:
 // [service] client_ip / - - - [09/Jun/2026:00:49:34 +0600] "GET /path HTTP/1.1" 200 1032272 "-" "User-Agent" "HIT/MISS" "upstream_host" "-"
+// client_ip may be IPv4 or IPv6 (incl. "::ffff:1.2.3.4").
 const LOG_REGEX =
-  /^\[(\w+)\]\s+([\d.]+)\s+\/\s+-\s+-\s+-\s+\[([^\]]+)\]\s+"(\w+)\s+([^"]+)\s+HTTP\/[\d.]+"\s+(\d+)\s+(\d+)\s+"[^"]*"\s+"[^"]*"\s+"([^"]*)"\s+"([^"]*)"/;
+  /^\[(\w+)\]\s+([0-9A-Fa-f:.]+)\s+\/\s+-\s+-\s+-\s+\[([^\]]+)\]\s+"(\w+)\s+([^"]+)\s+HTTP\/[\d.]+"\s+(\d+)\s+(\d+)\s+"[^"]*"\s+"[^"]*"\s+"([^"]*)"\s+"([^"]*)"/;
 
 const MONTH_MAP: Record<string, string> = {
   Jan: "01", Feb: "02", Mar: "03", Apr: "04",
