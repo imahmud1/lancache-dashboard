@@ -15,9 +15,17 @@ services:
       - DB_PATH=/app/data/lancache.db
       # IPs/prefixes hidden from stats by default (prefill from the cache host).
       - EXCLUDE_IPS=127.0.0.1,::1,172.,localhost
+      # Extra prefill clients, added to EXCLUDE_IPS (e.g. a prefill workstation).
+      - PREFILL_IPS=
+      # Show client hostnames via reverse DNS (needs PTR records on your LAN DNS).
+      - RESOLVE_HOSTNAMES=false
       # Match your lancache CACHE_MAX_AGE; used to estimate "likely cached".
       - CACHE_MAX_AGE_DAYS=60
-      # Locks the Ingest/Update actions only (viewing stays open). Optional.
+      # Event branding (optional). Logo: put brand-logo.svg|png|webp|jpg in ./data.
+      - BRAND_NAME=
+      - BRAND_TAGLINE=
+      - BRAND_ACCENT=
+      # Viewer/admin split: viewing stays open, Manage actions need this key. Optional.
       - ADMIN_API_KEY=
       # Full-site login. Set both to require credentials for everyone.
       - DASHBOARD_USER=

@@ -10,11 +10,16 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 
 ## Screenshots
 
-### Cache Savings
-![Cache Savings](docs/screenshots/cache-savings.png)
+*Real data from a production LanCache, with client IPs anonymized. Live downloads show simulated traffic.*
 
-### Stats Overview
-![Stats Overview](docs/screenshots/stats-cards.png)
+### Dashboard
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Event Display (`/display`)
+![Event Display](docs/screenshots/display.png)
+
+### Cache Summary
+![Cache Summary](docs/screenshots/summary.png)
 
 ### Time Range Filter
 ![Time Range Filter](docs/screenshots/date-picker.png)
@@ -44,14 +49,16 @@ Built to stay light on resources and tiny on disk, even when your access logs gr
 
 ## Features
 
-- **Cache savings at a glance** — A hero banner shows exactly how much bandwidth was served from cache vs fetched from the internet, so you can see what you're saving.
-- **Live downloads** — A persistent server-side tailer tracks downloads across **all services** in real time, grouped into sessions per client and game. Steam downloads show the resolved game name and cover art; other services show by platform. Open the page mid-download and you immediately see what's active (it doesn't only start watching when you connect).
+- **Cache savings at a glance** — The summary shows how much bandwidth was served from cache vs fetched from the internet, the hit rate, and which services the savings came from.
+- **Live downloads** — A persistent server-side tailer tracks downloads across **all services** in real time, **grouped by game** (e.g. "Battlefield 6 · 42 clients · 1.2 GB/s · 71% cache") with a scrolling 5-minute throughput chart. Expand a game to see each client. Built for events: the server computes one snapshot per second regardless of how many people are watching, sends only the top 25 games (plus a "+N more" total), and fetches per-client detail only when someone expands a row. Open the page mid-download and you immediately see what's active.
 - **Cached games with cover art** — Steam depots are resolved to real game names and header images. See which games have passed through your cache, their size, and hit rate. *(Experimental — see note below.)*
 - **Per-service breakdown** — Bandwidth, requests, cache savings, and hit rate for each platform (Steam, Epic, Battle.net, Riot, WSUS, etc.), as cards or a donut chart.
 - **Top clients leaderboard** — Which machines pulled the most, how much they saved from cache, and their hit rate.
-- **Daily bandwidth trend** — A 30-day stacked chart of cache vs internet traffic.
+- **Bandwidth trend** — Stacked cache vs internet bars (hourly, 3-hourly or daily depending on the range), with peak and average figures. Gaps in the data are marked, not smoothed over.
 - **Time range filter** — Scope every stat, chart, and table to a window: quick relative presets (last 6h through 30d), a custom UTC from/to range, or your own saved presets shared across viewers. Lives as a compact button in the top bar that expands to the full picker.
 - **Automatic ingestion** — New log lines are parsed every 60 seconds. Handles log rotation automatically.
+- **Event display** — A fullscreen 16:9 page at `/display` for a TV, projector or second monitor: hit rate, bytes saved, live downloads, top games, services and clients, readable from across a room. *(See [Event display](#event-display) below.)*
+- **Your event's branding** — Swap in your own name, tagline, logo and accent colour without rebuilding. *(See [Branding](#branding).)*
 - **Status Check page** — A standalone `/status` checker that tests, from the visitor's own browser, whether their network is routing supported services through a LanCache. Useful for sharing with users on your network. *(See [Status Check](#status-check) below.)*
 - **Tiny footprint** — Hundreds of GB of logs aggregate down to a SQLite DB measured in megabytes.
 
@@ -124,13 +131,70 @@ npm run dev
 |----------|---------|-------------|
 | `LOG_PATH` | `../logs/access.log` | Path to your LanCache `access.log` |
 | `DB_PATH` | `../data/lancache.db` | Path for the SQLite database. The Steam depot mapping is stored alongside it in the same directory. |
-| `EXCLUDE_IPS` | `127.0.0.1,::1,172.,localhost` | Comma-separated IPs/prefixes hidden from stats by default. Prefill traffic from the cache host (often the Docker bridge `172.18.0.1`) misses heavily and skews real client numbers. Entries ending in `.` or `:` are treated as prefixes. Toggle on/off live in the UI. |
+| `EXCLUDE_IPS` | `127.0.0.1,::1,172.,localhost` | Comma-separated IPs/prefixes hidden from stats by default. Prefill traffic from the cache host (often the Docker bridge `172.18.0.1`) misses heavily and skews real client numbers. Entries ending in `.` or `:` are treated as prefixes. Setting this **replaces** the default list. Toggle on/off live in the UI. |
+| `PREFILL_IPS` | *(empty)* | Extra IPs/prefixes treated as prefill, **added** to `EXCLUDE_IPS`. Use this when you run prefill from a LAN workstation instead of the cache host, e.g. `PREFILL_IPS=192.168.1.50`. Same format as `EXCLUDE_IPS`. |
+| `RESOLVE_HOSTNAMES` | `false` | Set to `true` to show client hostnames via reverse DNS (PTR). See [Client names](#client-names). |
 | `CACHE_MAX_AGE_DAYS` | `60` | Your lancache cache retention window. Used to estimate whether a game is "likely still cached" (last seen within this many days). Match it to your lancache `CACHE_MAX_AGE`. |
 | `PORT` | `3000` | Server port |
 
-> **Prefill / localhost traffic** — LanCache prefill runs from the cache host itself and is *expected* to miss almost everything. Counting it tanks your apparent hit rate (e.g. 24% real → 5% with prefill). By default the dashboard hides these IPs from all stats and the live view, but keeps ingesting them, so you can flip the **Hiding/Showing prefill** toggle in the header at any time without re-processing logs.
+> **Prefill / localhost traffic** — Prefill is *expected* to miss almost everything. Counting it tanks your apparent hit rate (e.g. 24% real → 5% with prefill). By default the dashboard hides the cache host's IPs from all stats and the live view, but keeps ingesting them, so you can flip the **Hiding/Showing prefill** toggle in the header at any time without re-processing logs.
+>
+> If you run the prefill tools (SteamPrefill, BattleNetPrefill, EpicPrefill) from **another machine on the LAN**, its traffic looks like a normal client. Add that machine's IP to `PREFILL_IPS` and it's treated the same way. When **Showing prefill**, those clients are tagged *Prefill* in Clients and Live Downloads. Cached Games totals aren't split per client, so prefill bytes still count there (prefill is what put those games in the cache).
 
 > **Data directory** — The depot mapping file (~100MB) and the SQLite database both live in the directory that contains `DB_PATH`. Make sure that directory is on a persistent volume.
+
+---
+
+## Event display
+
+Open **`/display`** (the **Display** button in the header) on the machine driving a TV or projector. It's a read-only, fullscreen 16:9 view of the public stats, laid out to be read from across a room:
+
+- **Backdrop:** the cover art of whatever is downloading fastest, blurred and darkened, crossfading as the top download changes. When idle it uses the most-cached game.
+- **Left:** "Now downloading" with the top game as a large art card (clients, speed, cache %), the next few below it, and a "+N more" count. When idle it shows the most-cached game and recent activity by client.
+- **Center:** a cache meter. The thick inner ring is the hit rate for the selected time range, and the thin outer ring is the cache/internet split of traffic flowing right now (it updates every second). Bytes saved, fetched upstream and total count up beneath it.
+- **Right:** live speed and a scrolling 5-minute cache/internet throughput chart.
+- **Bottom:** the top 5 games as posters with ranks, top clients, and a services ribbon.
+
+The layout is a fixed 16:9 stage that scales to any screen, letterboxed when the window isn't 16:9. Move the mouse to reveal **Fullscreen** and **Dashboard** buttons (or press <kbd>F</kbd>); they and the cursor hide after 3 seconds. The stage shifts a few pixels every five minutes to reduce burn-in on panels left running all day.
+
+It uses this browser's dashboard settings (time range, prefill toggle, speed unit). You can override them in the URL, which is handy for a kiosk machine:
+
+| Parameter | Example | Effect |
+|---|---|---|
+| `hours` | `/display?hours=24` | Relative range |
+| `saved` | `/display?saved=3` | A saved range (the ID from `/api/ranges`) |
+| `start` + `end` | `/display?start=2026-07-01T18&end=2026-07-03T02` | Absolute range (UTC hours) |
+| `prefill` | `/display?prefill=show` | Include prefill / excluded clients |
+| `unit` | `/display?unit=bits` | Live speed in bit/s |
+| `clients` | `/display?clients=hide` | Replace client IPs/hostnames with "Client 1, 2…" |
+
+Top games are always **all time**, because cached-game totals aren't stored per time range.
+
+---
+
+## Branding
+
+Make the dashboard and display your event's own. Everything is optional, and nothing needs a rebuild.
+
+| Setting | Example | Effect |
+|---|---|---|
+| `BRAND_NAME` | `Summer LAN 2026` | Replaces "LanCache" in the header, the display, and the browser tab |
+| `BRAND_TAGLINE` | `Hall B · cache by LanCache` | A short second line under the name |
+| `BRAND_ACCENT` | `#ff7a45` | Hex colour for live and interactive marks (Live dot, focus rings, active buttons) |
+| `brand-logo.svg` / `.png` / `.webp` / `.jpg` | in the data directory | Shown instead of the default mark. Max 2 MB. Swap the file any time; viewers pick it up on reload. |
+
+Green (served from cache) and amber (from the internet) are fixed, so the data always means the same thing. If `BRAND_ACCENT` is close to either, the server logs a warning and suggests another hue.
+
+---
+
+## Client names
+
+Clients, Live Downloads, and Recent Downloads can show a hostname next to the IP (`CHIKO-PC  192.168.1.175`). There are two optional sources:
+
+- **`client-names.json`** in the data directory: a plain `{ "192.168.1.175": "CHIKO-PC" }` map. Always takes priority, and it's re-read when the file changes, so you can label seats mid-event without a restart.
+- **Reverse DNS**, enabled with `RESOLVE_HOSTNAMES=true`. This only works if your DHCP/DNS server registers client hostnames (pfSense/OPNsense, dnsmasq, Windows DNS, most consumer routers). Lookups run in the background and are cached (1h for found names, 10 min for misses), so a new client's name shows up on the next refresh. In Docker, the container uses the host's DNS servers. If those aren't your LAN resolver, set `dns: [<router-ip>]` in your compose file.
+
+Hostnames are visible to everyone who can open the dashboard. Machine names often include people's real names, so keep that in mind before turning this on for a public event.
 
 ---
 
@@ -140,8 +204,17 @@ The dashboard is built for a trusted LAN, but it ships with two opt-in protectio
 
 | Variable | Effect |
 |----------|--------|
-| `ADMIN_API_KEY` | When set, the **Ingest Logs** and **Update Depots** actions require this key. Viewing all stats stays open. Enter the key once via the **Admin** button in the UI (stored in your browser). Recommended — it stops random viewers from triggering re-ingests or 100MB depot downloads. |
-| `DASHBOARD_USER` + `DASHBOARD_PASSWORD` | When both are set, the **entire** dashboard (UI + API) is behind HTTP Basic Auth — nobody sees anything without the credentials. Use this for stricter setups. |
+| `ADMIN_API_KEY` | Splits users into **viewers** and **admins**. Without the key, everyone can see every stat, chart, live download, and the Status Check page, but the **Manage** menu (ingest, rebuild, update depots) is hidden and saved time ranges are read-only. Enter the key once via the **Admin** button in the UI (stored in your browser). Recommended for LAN events: share the URL with every participant and keep the key to yourself. Use a long random key, e.g. `openssl rand -hex 24`. |
+| `DASHBOARD_USER` + `DASHBOARD_PASSWORD` | When both are set, the **entire** dashboard (UI + API) is behind HTTP Basic Auth — nobody sees anything without the credentials. Use this for stricter setups. Works together with `ADMIN_API_KEY`. |
+
+**Viewer vs Admin at a glance** (with `ADMIN_API_KEY` set):
+
+| | Viewer | Admin |
+|---|---|---|
+| Stats, charts, live downloads, cached games, clients, services | ✓ | ✓ |
+| Status Check, time range filter, prefill toggle | ✓ | ✓ |
+| Ingest / rebuild / update depots | — | ✓ |
+| Create or delete saved time ranges | — | ✓ |
 
 Other notes:
 - Read endpoints (stats, clients, games, live) are intentionally open so the dashboard "just works" for viewers. Only mutating actions are gated by `ADMIN_API_KEY`.
@@ -172,7 +245,23 @@ Instead of logging in, this dashboard uses a **pre-built depot → app mapping**
 
 **Battle.net** games are resolved using TACT product codes embedded in CDN hostnames (e.g. `cod-assets.cdn.blizzard.com` → Call of Duty). The product list is based on [tpill90/battlenet-lancache-prefill](https://github.com/tpill90/battlenet-lancache-prefill).
 
-**Other services (Epic, Riot, etc.)** cannot currently be resolved to game names — their CDN URLs are opaque hashes with no known public mapping. They're shown at the service level only.
+**Epic Games** titles are named from the build artifact in the download path (e.g. `/Builds/Fortnite/...` → *Fortnite*). Epic has no public artifact → artwork mapping, so there's no cover art by default.
+
+**Other services (Riot, EA, Ubisoft, etc.)** cannot currently be resolved to game names — their CDN URLs are opaque hashes with no known public mapping. They're shown at the service level only.
+
+### Custom game names & artwork
+
+For anything the built-in resolvers miss (Battle.net titles without a Steam version, Epic games, a Steam depot that resolves wrong), create `game-overrides.json` in the data directory (next to the DB):
+
+```json
+{
+  "blizzard:wow":       { "name": "World of Warcraft", "image": "https://example.com/wow.jpg" },
+  "epicgames:Fortnite": { "image": "https://example.com/fortnite.jpg" },
+  "steam:2807966":      { "name": "Battlefield 6" }
+}
+```
+
+Keys are `<service>:<gameId>` (case-insensitive). The game ID is the Steam depot, the Battle.net product code, or the Epic artifact name. Either field is optional. Images must be `http(s)` URLs and are loaded by each viewer's browser. The file is re-read automatically when it changes, so you don't need to restart. Overrides apply to Cached Games and Live Downloads.
 
 ---
 

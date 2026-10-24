@@ -67,3 +67,8 @@ docs/agents/triage-labels.md
 
 # local ADRs (kept out of version control)
 docs/adr/
+
+# impeccable design tooling (local only)
+.impeccable/
+PRODUCT.md
+DESIGN.md
