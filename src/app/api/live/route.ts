@@ -1,9 +1,15 @@
 import { NextRequest } from "next/server";
-import { getActiveDownloads } from "@/lib/live-tracker";
+import { getLiveSnapshot, getLiveHistory } from "@/lib/live-tracker";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+/**
+ * Server-sent events. The first frame carries up to 5 minutes of throughput
+ * history; every frame after that is the cached 1-second snapshot (groups by
+ * game, capped at 25). Per-client detail is fetched on demand from
+ * /api/live/group so frame size stays flat however many clients are active.
+ */
 export async function GET(req: NextRequest) {
   const encoder = new TextEncoder();
   const includeAll = req.nextUrl.searchParams.get("includeAll") === "1";
@@ -11,20 +17,23 @@ export async function GET(req: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       let closed = false;
+      let last = 0;
 
-      const send = () => {
+      const send = (withHistory: boolean) => {
         if (closed) return;
         try {
-          const snapshot = getActiveDownloads(includeAll);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(snapshot)}\n\n`));
+          const snapshot = getLiveSnapshot(includeAll);
+          if (!withHistory && snapshot.at === last) return; // nothing new since the last frame
+          last = snapshot.at;
+          const frame = withHistory ? { ...snapshot, history: getLiveHistory(includeAll) } : snapshot;
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
         } catch {
           // ignore transient errors
         }
       };
 
-      // Immediate snapshot on connect, then every second
-      send();
-      const intervalId = setInterval(send, 1000);
+      send(true);
+      const intervalId = setInterval(() => send(false), 1000);
 
       req.signal.addEventListener("abort", () => {
         closed = true;
