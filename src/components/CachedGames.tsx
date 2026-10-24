@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Gamepad2, ChevronDown, Search, Database, Zap, FlaskConical, Info } from "lucide-react";
-import { formatBytes, getServiceLabel, getServiceColor } from "@/lib/format";
+import { Gamepad2, ChevronDown, Search, Info } from "lucide-react";
+import { formatBytes, formatNumber, getServiceLabel, getServiceColor, getServiceAbbr } from "@/lib/format";
+import { Panel, Segmented, Empty, hitTone, pct } from "./ui";
 
-interface CachedGame {
+export interface CachedGame {
   service: string;
   gameId: string;
   gameName: string;
@@ -24,31 +25,30 @@ interface Summary {
   totalCachedBytes: number;
 }
 
-export function CachedGames() {
-  const [allGames, setAllGames] = useState<CachedGame[]>([]);
-  const [summary, setSummary] = useState<Summary>({ totalGames: 0, gamesInCache: 0, totalCachedBytes: 0 });
-  const [serviceFilter, setServiceFilter] = useState<string>("all");
-  const [search, setSearch] = useState("");
-  const [showAll, setShowAll] = useState(false);
+const EMPTY_SUMMARY: Summary = { totalGames: 0, gamesInCache: 0, totalCachedBytes: 0 };
+
+/** Loads /api/games, re-polling while depots resolve and every `refreshMs` after. */
+export function useGames(refreshMs = 0): { games: CachedGame[]; summary: Summary; loading: boolean } {
+  const [games, setGames] = useState<CachedGame[]>([]);
+  const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     const load = async () => {
       try {
         const res = await fetch("/api/games");
         const data = await res.json();
         if (cancelled) return;
-        setAllGames(data.games || []);
-        setSummary(data.summary || { totalGames: 0, gamesInCache: 0, totalCachedBytes: 0 });
-        // If the server is still resolving depots in the background, poll again shortly
-        if (data.resolving) {
-          pollTimer = setTimeout(load, 4000);
-        }
+        setGames(data.games || []);
+        setSummary(data.summary || EMPTY_SUMMARY);
+        // Still resolving depots server-side: check back soon, otherwise on the slow cadence
+        if (data.resolving) timer = setTimeout(load, 4000);
+        else if (refreshMs > 0) timer = setTimeout(load, refreshMs);
       } catch {
-        // ignore
+        if (!cancelled && refreshMs > 0) timer = setTimeout(load, refreshMs);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -57,9 +57,25 @@ export function CachedGames() {
     load();
     return () => {
       cancelled = true;
-      if (pollTimer) clearTimeout(pollTimer);
+      if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [refreshMs]);
+
+  return { games, summary, loading };
+}
+
+/** Unresolved titles are named by their service ("Riot Games content") and flagged, never presented as a game name. */
+export function gameDisplayName(g: CachedGame): { name: string; resolved: boolean } {
+  const resolved = !!g.gameName && !g.gameName.startsWith("Depot ");
+  return { name: resolved ? g.gameName : `${getServiceLabel(g.service)} content`, resolved };
+}
+
+/** Pass `data` from a parent useGames() so the page fetches /api/games once. */
+export function CachedGames({ data }: { data: ReturnType<typeof useGames> }) {
+  const { games: allGames, summary, loading } = data;
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [showAll, setShowAll] = useState(false);
 
   const services = useMemo(() => Array.from(new Set(allGames.map((g) => g.service))), [allGames]);
 
@@ -68,7 +84,7 @@ export function CachedGames() {
     if (serviceFilter !== "all") games = games.filter((g) => g.service === serviceFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      games = games.filter((g) => g.gameName.toLowerCase().includes(q) || g.gameId.includes(q));
+      games = games.filter((g) => g.gameName.toLowerCase().includes(q) || g.gameId.toLowerCase().includes(q));
     }
     return games;
   }, [allGames, serviceFilter, search]);
@@ -76,96 +92,82 @@ export function CachedGames() {
   const visible = showAll || search ? filteredGames : filteredGames.slice(0, 8);
   const hasMore = !showAll && !search && filteredGames.length > 8;
 
-  if (loading) {
-    return (
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-        <div className="h-6 w-44 bg-gray-800 rounded-lg animate-pulse mb-5" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="aspect-[3/4] bg-gray-800 rounded-xl animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
-            <Gamepad2 className="w-4 h-4 text-purple-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-50 leading-none">Cached Games</h3>
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[9px] font-semibold text-amber-400 uppercase tracking-wide">
-                <FlaskConical className="w-2.5 h-2.5" /> Experimental
-              </span>
-            </div>
-            <p className="text-[11px] text-gray-500 mt-1">{summary.totalGames} titles discovered</p>
-          </div>
+    <Panel
+      title="Cached games"
+      icon={Gamepad2}
+      meta={
+        <span className="inline-flex items-center gap-2">
+          <span className="rounded border border-internet/30 px-1.5 py-px text-[10px] font-semibold text-internet">Experimental</span>
+          <span className="figure">{summary.totalGames} titles · all time</span>
+        </span>
+      }
+      actions={
+        <div className="flex items-center gap-5 text-xs">
+          <span>
+            <span className="figure text-sm font-semibold text-cache">{summary.gamesInCache}</span>
+            <span className="text-ink-3 ml-1.5">likely cached</span>
+          </span>
+          <span>
+            <span className="figure text-sm font-semibold text-ink">{formatBytes(summary.totalCachedBytes)}</span>
+            <span className="text-ink-3 ml-1.5">served</span>
+          </span>
         </div>
+      }
+    >
+      <p className="flex items-start gap-2 text-xs text-ink-3 leading-relaxed mb-4 max-w-[75ch]">
+        <Info className="w-3.5 h-3.5 mt-px shrink-0" aria-hidden />
+        <span>
+          Inferred from access logs, not a scan of the cache folder. <span className="text-ink-2">Likely cached</span> means the title was active
+          within the cache retention window, so it&apos;s probably still on disk. Evictions happen silently and aren&apos;t reflected here.
+        </span>
+      </p>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20">
-            <Database className="w-3.5 h-3.5 text-green-400" />
-            <span className="text-xs font-semibold text-green-400">{summary.gamesInCache}</span>
-            <span className="text-[11px] text-green-500/70">likely cached</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-            <Zap className="w-3.5 h-3.5 text-blue-400" />
-            <span className="text-xs font-semibold text-blue-400">{formatBytes(summary.totalCachedBytes)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Inferred-data note */}
-      <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-lg bg-gray-800/40 border border-gray-800">
-        <Info className="w-3.5 h-3.5 text-gray-500 mt-0.5 shrink-0" />
-        <p className="text-[11px] text-gray-500 leading-relaxed">
-          Inferred from access logs, not a live scan of the cache folder.
-          <span className="text-gray-400"> Likely cached</span> means the title was active within the cache retention window, so it&apos;s probably still on disk.
-          Eviction (LRU / max-age) happens silently and isn&apos;t reflected here.
-        </p>
-      </div>
-
-      {/* Toolbar: search + filters */}
+      {/* Search + service filter */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+        <label className="relative flex-1 min-w-[14rem]">
+          <span className="sr-only">Search games</span>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3 pointer-events-none" aria-hidden />
           <input
-            type="text"
-            placeholder="Search games..."
+            type="search"
+            placeholder="Search games or IDs"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-950/50 border border-gray-700/60 rounded-xl text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 transition-all"
+            className="w-full h-9 pl-9 pr-3 bg-ground/60 border border-line rounded-lg text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors"
           />
-        </div>
-
-        <div className="flex items-center gap-1 p-1 bg-gray-950/50 border border-gray-700/60 rounded-xl">
-          <SegmentBtn active={serviceFilter === "all"} onClick={() => setServiceFilter("all")} label="All" count={allGames.length} />
-          {services.map((svc) => (
-            <SegmentBtn
-              key={svc}
-              active={serviceFilter === svc}
-              onClick={() => setServiceFilter(svc)}
-              label={getServiceLabel(svc)}
-              count={allGames.filter((g) => g.service === svc).length}
-            />
-          ))}
-        </div>
+        </label>
+        {services.length > 0 && (
+          <Segmented
+            label="Filter by service"
+            value={serviceFilter}
+            onChange={setServiceFilter}
+            options={[
+              { value: "all", label: "All", count: allGames.length },
+              ...services.map((svc) => ({
+                value: svc,
+                label: getServiceLabel(svc),
+                count: allGames.filter((g) => g.service === svc).length,
+              })),
+            ]}
+          />
+        )}
       </div>
 
-      {/* Grid */}
-      {visible.length === 0 ? (
-        <div className="text-center py-16">
-          <Gamepad2 className="w-8 h-8 text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">
-            {allGames.length === 0 ? "No cached games yet — run ingestion to discover content." : "No games match your search."}
-          </p>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" aria-busy>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-line overflow-hidden">
+              <div className="aspect-[460/215] bg-raised animate-pulse" />
+              <div className="h-24 bg-panel" />
+            </div>
+          ))}
         </div>
+      ) : visible.length === 0 ? (
+        <Empty
+          icon={Gamepad2}
+          title={allGames.length === 0 ? "No games discovered yet" : "No games match your search"}
+          hint={allGames.length === 0 ? "Games appear once their downloads are ingested." : "Try a different name or clear the filter."}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {visible.map((game) => (
@@ -174,58 +176,29 @@ export function CachedGames() {
         </div>
       )}
 
-      {/* Show more */}
       {hasMore && (
         <button
           onClick={() => setShowAll(true)}
-          className="flex items-center gap-2 mx-auto mt-5 px-5 py-2.5 text-sm font-medium text-gray-300 bg-gray-800/70 border border-gray-700 rounded-xl hover:bg-gray-800 hover:text-white hover:border-gray-600 transition-all"
+          className="flex items-center gap-2 mx-auto mt-5 h-9 px-4 text-[13px] font-medium text-ink-2 bg-panel border border-line rounded-lg hover:text-ink hover:border-line-strong transition-colors"
         >
           Show all {filteredGames.length} games
-          <ChevronDown className="w-4 h-4" />
+          <ChevronDown className="w-4 h-4" aria-hidden />
         </button>
       )}
-    </div>
+    </Panel>
   );
 }
 
-function SegmentBtn({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count: number }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-        active ? "bg-purple-600 text-white shadow-sm shadow-purple-600/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
-      }`}
-    >
-      {label}
-      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? "bg-white/20" : "bg-gray-700/60 text-gray-500"}`}>
-        {count}
-      </span>
-    </button>
-  );
-}
-
-function GameCard({ game }: { game: CachedGame }) {
+/** Game header art with the store-API retry for stale Steam image URLs. */
+export function GameArt({ game, className = "", label = true }: { game: CachedGame; className?: string; label?: boolean }) {
   const [imgErr, setImgErr] = useState(false);
   const [imgSrc, setImgSrc] = useState(game.imageUrl);
-  const serviceColor = getServiceColor(game.service);
-  const resolved = !!game.gameName && !game.gameName.startsWith("Depot ");
-  const name = resolved ? game.gameName : `Unknown content`;
-  const total = game.hitCount + game.missCount;
-  const hitRate = total > 0 ? Math.round((game.hitCount / total) * 100) : 0;
-  const showImg = imgSrc && !imgErr;
-
-  const hitColor = hitRate >= 50 ? "text-green-400" : hitRate > 0 ? "text-amber-400" : "text-gray-500";
-  const barColor = hitRate >= 50 ? "bg-green-500" : hitRate > 0 ? "bg-amber-500" : "bg-gray-600";
+  const { name } = gameDisplayName(game);
 
   // When the PICS image 404s (common for unreleased titles), ask the store API
   // for the real (hashed) image URL and retry once before giving up.
   const handleImgError = async () => {
-    if (game.service !== "steam") {
-      setImgErr(true);
-      return;
-    }
-    const appMatch = (imgSrc || "").match(/\/apps\/(\d+)\//);
-    const appId = appMatch?.[1];
+    const appId = game.service === "steam" ? (imgSrc || "").match(/\/apps\/(\d+)\//)?.[1] : undefined;
     if (!appId) {
       setImgErr(true);
       return;
@@ -234,7 +207,7 @@ function GameCard({ game }: { game: CachedGame }) {
       const res = await fetch(`/api/games/image?appId=${appId}&depotId=${game.gameId}`);
       const data = await res.json();
       if (data.imageUrl && data.imageUrl !== imgSrc) {
-        setImgSrc(data.imageUrl); // retry with the working URL
+        setImgSrc(data.imageUrl);
         return;
       }
     } catch {
@@ -244,86 +217,73 @@ function GameCard({ game }: { game: CachedGame }) {
   };
 
   return (
-    <div className="group rounded-xl overflow-hidden bg-gray-850 border border-gray-800 hover:border-gray-600 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/40">
-      {/* Banner */}
-      <div className="relative aspect-[460/215] overflow-hidden">
-        {showImg ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imgSrc}
-            alt={name}
-            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            loading="lazy"
-            onError={handleImgError}
-          />
-        ) : (
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ background: `linear-gradient(135deg, ${serviceColor}40, #0a0f1a)` }}
-          >
-            <span className="text-lg font-bold text-white/90">{getServiceLabel(game.service)}</span>
-          </div>
-        )}
+    <div className={`relative overflow-hidden bg-raised ${className}`}>
+      {imgSrc && !imgErr ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imgSrc}
+          alt={name}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+          loading="lazy"
+          onError={handleImgError}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: `${getServiceColor(game.service)}26` }}>
+          {label && <span className="font-display [font-stretch:85%] text-lg font-semibold text-ink-2">{getServiceLabel(game.service)}</span>}
+          {!label && <span className="text-[10px] font-semibold text-ink-2">{getServiceAbbr(game.service)}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
 
-        {/* Gradient scrim */}
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/40 to-transparent" />
+function GameCard({ game }: { game: CachedGame }) {
+  const { name, resolved } = gameDisplayName(game);
+  const total = game.hitCount + game.missCount;
+  const hitRate = Math.round(pct(game.hitCount, total));
+  const tone = hitTone(hitRate);
 
-        {/* Top badges */}
-        <div className="absolute top-2 left-2 right-2 flex items-center justify-between">
-          <span className="px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wide text-gray-200 border border-white/10">
-            {getServiceLabel(game.service)}
-          </span>
+  return (
+    <article className="group rounded-lg overflow-hidden border border-line bg-raised/40 transition-[transform,border-color,box-shadow] duration-300 ease-out hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_14px_32px_rgba(0,0,0,0.45)]">
+      <div className="relative">
+        <GameArt game={game} className="aspect-[460/215]" />
+        <div className="absolute top-2 left-2 right-2 flex items-center justify-between gap-2">
+          <span className="px-1.5 py-0.5 rounded bg-ground/80 text-[10px] font-semibold text-ink-2">{getServiceLabel(game.service)}</span>
           {game.likelyCached ? (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-green-500/90 backdrop-blur-sm text-[10px] font-semibold text-white" title="Active within the cache retention window — probably still on disk">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-ground/80 text-[10px] font-semibold text-cache"
+              title="Active within the cache retention window, so probably still on disk"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-cache" aria-hidden />
               Likely cached
             </span>
           ) : game.servedFromCache ? (
-            <span className="px-2 py-0.5 rounded-md bg-gray-700/80 backdrop-blur-sm text-[10px] font-semibold text-gray-300" title="Served from cache historically, but not recently — may have been evicted">
+            <span className="px-1.5 py-0.5 rounded bg-ground/80 text-[10px] font-semibold text-ink-3" title="Served from cache historically, but not recently. It may have been evicted.">
               Was cached
             </span>
           ) : null}
         </div>
-
-        {/* Title overlaid at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-3">
-          <h4 className={`text-sm font-semibold leading-tight line-clamp-2 ${resolved ? "text-white" : "text-gray-400 italic"}`} title={name}>
-            {name}
-          </h4>
-        </div>
       </div>
 
-      {/* Stats footer */}
-      <div className="p-3 space-y-2.5">
-        {/* Top stat row */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Bandwidth</p>
-            <p className="text-sm font-bold text-blue-400">{formatBytes(game.totalBytes)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Requests</p>
-            <p className="text-sm font-semibold text-gray-200">{total.toLocaleString()}</p>
-          </div>
+      <div className="p-3.5">
+        <h3 className="flex items-baseline gap-2 text-sm font-semibold leading-snug text-ink min-w-0" title={resolved ? name : `${name}: title not identified from the logs`}>
+          <span className="truncate">{name}</span>
+          {!resolved && <span className="shrink-0 text-[11px] font-medium text-ink-3">unresolved</span>}
+        </h3>
+        <div className="flex items-baseline justify-between mt-2">
+          <span className="figure text-xl font-semibold text-ink leading-none">{formatBytes(game.totalBytes)}</span>
+          <span className={`figure text-sm font-semibold ${tone.text}`}>{hitRate}% hit</span>
         </div>
-
-        {/* Hit rate bar */}
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Cache Hit Rate</span>
-            <span className={`text-[11px] font-bold ${hitColor}`}>{hitRate}%</span>
-          </div>
-          <div className="h-1.5 rounded-full bg-gray-700/70 overflow-hidden">
-            <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.max(hitRate, 2)}%` }} />
-          </div>
+        <div className="h-1 rounded-full bg-raised overflow-hidden mt-2" aria-hidden>
+          <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.max(hitRate, 2)}%` }} />
         </div>
-
-        {/* Footer meta */}
-        <div className="flex items-center justify-between pt-1 text-[10px] text-gray-600">
-          <span>{game.hitCount.toLocaleString()} hits · {game.missCount.toLocaleString()} miss</span>
-          <span>{game.lastSeen.slice(0, 10)}</span>
+        <div className="flex items-center justify-between mt-2.5 text-[11px] text-ink-3">
+          <span className="figure">
+            {formatNumber(game.hitCount)} hits · {formatNumber(game.missCount)} misses
+          </span>
+          <span className="figure">Last {game.lastSeen.slice(0, 10)}</span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }

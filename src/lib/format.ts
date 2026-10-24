@@ -1,8 +1,9 @@
 export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB", "PB"];
   const k = 1024;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  // Clamp so fractional values (e.g. a scaled chart tick) still format in bytes.
+  const i = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log(bytes) / Math.log(k))));
   const value = bytes / Math.pow(k, i);
   return `${value.toFixed(i > 2 ? 2 : 0)} ${units[i]}`;
 }
@@ -10,10 +11,10 @@ export function formatBytes(bytes: number): string {
 // Reports a byte/sec rate in bits/sec, using a 1024 base to mirror formatBytes.
 export function formatBits(bytesPerSec: number): string {
   const bits = bytesPerSec * 8;
-  if (bits === 0) return "0 bps";
+  if (!Number.isFinite(bits) || bits <= 0) return "0 bps";
   const units = ["bps", "Kbps", "Mbps", "Gbps", "Tbps", "Pbps"];
   const k = 1024;
-  const i = Math.min(Math.floor(Math.log(bits) / Math.log(k)), units.length - 1);
+  const i = Math.min(units.length - 1, Math.max(0, Math.floor(Math.log(bits) / Math.log(k))));
   const value = bits / Math.pow(k, i);
   return `${value.toFixed(i > 2 ? 2 : 0)} ${units[i]}`;
 }

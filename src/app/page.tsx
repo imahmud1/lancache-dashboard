@@ -2,42 +2,39 @@
 
 import { useEffect, useState, useCallback, type ReactNode } from "react";
 import Link from "next/link";
-import { HardDrive, Activity, Users, Gauge, Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, RotateCcw, Radar, ChevronDown, AlertTriangle, CalendarRange } from "lucide-react";
-import { StatsCard } from "@/components/StatsCard";
+import { Database, RefreshCw, Boxes, Eye, EyeOff, Lock, Unlock, Radar, ChevronDown, AlertTriangle, CalendarRange, MonitorPlay } from "lucide-react";
 import { ServiceChart } from "@/components/ServiceChart";
 import { BandwidthChart } from "@/components/BandwidthChart";
 import { ClientsTable } from "@/components/ClientsTable";
 import { RecentActivity } from "@/components/RecentActivity";
 import { LiveDownloads } from "@/components/LiveDownloads";
-import { CachedGames } from "@/components/CachedGames";
-import { CacheSavings } from "@/components/CacheSavings";
+import { CachedGames, useGames } from "@/components/CachedGames";
+import { SummaryBand, type Overview } from "@/components/SummaryBand";
 import { RangePanel } from "@/components/RangePanel";
-import { formatBytes, formatNumber } from "@/lib/format";
+import { BrandMark, useBrand } from "@/components/Brand";
+import { ToolButton } from "@/components/ui";
+import { formatBytes } from "@/lib/format";
 import { RangeSelection, ALL_TIME, resolveSelection, selectionLabel } from "@/lib/range";
 
 interface DashboardData {
-  overview: {
-    totalRequests: number;
-    totalBytesSent: number;
-    cacheHitRate: number;
-    cacheHitRateByReq: number;
-    servedFromCache: number;
-    servedFromUpstream: number;
-    totalClients: number;
-    totalServices: number;
-  };
+  overview: Overview;
   services: { service: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
   bandwidth: { bucket: string; bytesSent: number; requests: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number }[];
   bandwidthGranularity: "hour" | "3h" | "day";
 }
 
+const linkCls =
+  "inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-panel text-[13px] font-medium text-ink-2 hover:text-ink hover:border-line-strong transition-colors";
+
 export default function Dashboard() {
+  const brand = useBrand();
+  const gamesData = useGames(5 * 60_000);
   const [data, setData] = useState<DashboardData | null>(null);
   const [clients, setClients] = useState<
-    { clientIp: string; requests: number; bytesSent: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number; topService: string }[]
+    { clientIp: string; requests: number; bytesSent: number; cacheHits: number; cacheMisses: number; hitBytes: number; missBytes: number; topService: string; hostname?: string | null; excluded?: boolean }[]
   >([]);
   const [recent, setRecent] = useState<
-    { id: number; timestamp: string; service: string; clientIp: string; requestPath: string; bytesSent: number; cacheStatus: string; upstreamHost: string }[]
+    { id: number; timestamp: string; service: string; clientIp: string; requestPath: string; bytesSent: number; cacheStatus: string; upstreamHost: string; hostname?: string | null }[]
   >([]);
   const [ingest, setIngest] = useState<{ running: boolean; error: boolean; percent: number; lines: number; message: string }>({
     running: false, error: false, percent: 0, lines: 0, message: "",
@@ -183,9 +180,7 @@ export default function Dashboard() {
         alert("Admin key required or invalid. Please unlock again.");
         return;
       }
-      if (res.status === 409) {
-        // already running — just start polling
-      }
+      // 409 = already running; fall through and poll its progress
     } catch {
       return;
     }
@@ -224,7 +219,7 @@ export default function Dashboard() {
     } catch {
       return;
     }
-    setDepot((s) => ({ ...s, running: true, message: "Starting..." }));
+    setDepot((s) => ({ ...s, running: true, message: "Starting…" }));
 
     const poll = async () => {
       try {
@@ -243,91 +238,94 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400 flex items-center gap-3">
-          <RefreshCw className="w-5 h-5 animate-spin" />
-          Loading dashboard...
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-ink-3 text-sm flex items-center gap-3" role="status">
+          <RefreshCw className="w-4 h-4 animate-spin" aria-hidden />
+          Loading dashboard…
         </div>
       </div>
     );
   }
 
-  const hitRate = data?.overview.cacheHitRate || 0;
+  const rangeLabel = selectionLabel(selection);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-gray-800 bg-gray-950/80 backdrop-blur-lg">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Database className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold leading-none">LanCache</h1>
-              <p className="text-[11px] text-gray-500 mt-0.5">Monitoring Dashboard</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleIncludeAll}
-              title={includeAll ? "Currently showing all traffic including localhost prefill" : "Localhost/prefill traffic is hidden"}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors border ${
-                includeAll
-                  ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                  : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
-              }`}
-            >
-              {includeAll ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-              <span className="hidden md:inline">{includeAll ? "Showing prefill" : "Hiding prefill"}</span>
-            </button>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-20 border-b border-line bg-ground/85 backdrop-blur-md">
+        <div className="max-w-[90rem] mx-auto px-5 min-h-16 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <BrandMark brand={brand} className="text-[15px] shrink-0" />
 
-            <button
-              onClick={toggleRange}
-              title="Time range filter"
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors border min-w-0 ${
-                rangeOpen
-                  ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-300"
-                  : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
-              }`}
+          <nav className="flex flex-wrap items-center gap-2 w-full sm:w-auto" aria-label="Dashboard controls">
+            <ToolButton
+              onClick={toggleIncludeAll}
+              active={includeAll}
+              tone="internet"
+              aria-pressed={includeAll}
+              aria-label={includeAll ? "Prefill traffic shown" : "Prefill traffic hidden"}
+              title={
+                includeAll
+                  ? "Showing all traffic, including the cache host and any PREFILL_IPS / EXCLUDE_IPS clients"
+                  : "Cache-host and PREFILL_IPS / EXCLUDE_IPS clients are hidden from stats"
+              }
             >
-              <CalendarRange className="w-4 h-4 shrink-0" />
-              <span className="hidden md:inline max-w-[12rem] truncate">{selectionLabel(selection)}</span>
-              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${rangeOpen ? "rotate-180" : ""}`} />
-            </button>
+              {includeAll ? <Eye className="w-4 h-4" aria-hidden /> : <EyeOff className="w-4 h-4" aria-hidden />}
+              <span className="md:hidden">Prefill</span>
+              <span className="hidden md:inline">{includeAll ? "Showing prefill" : "Hiding prefill"}</span>
+            </ToolButton>
+
+            <ToolButton
+              onClick={toggleRange}
+              active={rangeOpen}
+              aria-expanded={rangeOpen}
+              aria-label={`Time range: ${rangeLabel}`}
+              title="Time range filter"
+              className="min-w-0"
+            >
+              <CalendarRange className="w-4 h-4 shrink-0" aria-hidden />
+              <span className="max-w-[7rem] md:max-w-[12rem] truncate">{rangeLabel}</span>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-ink-3 transition-transform ${rangeOpen ? "rotate-180" : ""}`} aria-hidden />
+            </ToolButton>
+
+            <Link href="/display" className={linkCls} aria-label="Display: fullscreen 16:9 view" title="Fullscreen 16:9 view for a TV or projector">
+              <MonitorPlay className="w-4 h-4" aria-hidden />
+              <span>Display</span>
+            </Link>
 
             <Link
               href="/status"
+              className={linkCls}
+              aria-label="Status check"
               title="Check whether this network's LanCache is intercepting supported services"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors border bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200"
             >
-              <Radar className="w-4 h-4" />
-              <span className="hidden md:inline">Status Check</span>
+              <Radar className="w-4 h-4" aria-hidden />
+              <span className="lg:hidden">Status</span>
+              <span className="hidden lg:inline">Status check</span>
             </Link>
 
             {canAdmin && (
               <div className="relative">
-                <button
+                <ToolButton
                   onClick={() => setMenuOpen((o) => !o)}
+                  aria-expanded={menuOpen}
+                  aria-label="Manage: ingest, rebuild, and depot actions"
+                  active={menuOpen}
                   title="Ingest, rebuild, and depot actions"
-                  className="flex items-center gap-2 px-3.5 py-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm font-medium transition-colors border border-gray-700 text-gray-300"
                 >
                   {ingest.running || depot.running ? (
-                    <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
+                    <RefreshCw className="w-4 h-4 animate-spin text-accent" aria-hidden />
                   ) : (
-                    <Database className="w-4 h-4 text-gray-400" />
+                    <Database className="w-4 h-4" aria-hidden />
                   )}
-                  <span className="hidden sm:inline">Manage</span>
-                  <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
-                </button>
+                  <span>Manage</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-ink-3 transition-transform ${menuOpen ? "rotate-180" : ""}`} aria-hidden />
+                </ToolButton>
 
                 {menuOpen && (
                   <>
                     <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-60 z-40 rounded-xl border border-gray-800 bg-gray-900 shadow-xl shadow-black/40 py-1.5">
+                    <div className="absolute right-0 mt-2 w-64 z-40 rounded-xl border border-line-strong bg-raised shadow-[0_16px_40px_rgba(0,0,0,0.5)] p-1.5" role="menu">
                       <MenuItem
                         icon={RefreshCw}
-                        accent="blue"
                         label={ingest.running ? "Ingesting…" : "Ingest new logs"}
                         hint="Add log lines written since the last run"
                         disabled={ingest.running}
@@ -335,18 +333,16 @@ export default function Dashboard() {
                       />
                       <MenuItem
                         icon={Boxes}
-                        accent="purple"
                         label={depot.running ? "Updating depots…" : "Update depots"}
                         hint="Refresh the Steam depot → game name mapping"
                         disabled={depot.running}
                         onClick={() => { setMenuOpen(false); handleDepotRefresh(); }}
                       />
-                      <div className="my-1.5 border-t border-gray-800" />
+                      <div className="my-1.5 border-t border-line" />
                       <MenuItem
                         icon={AlertTriangle}
                         label="Rebuild from log…"
                         hint="Clears totals and recounts from access.log"
-                        accent="red"
                         danger
                         disabled={ingest.running}
                         onClick={() => { setMenuOpen(false); setRebuildOpen(true); }}
@@ -357,39 +353,28 @@ export default function Dashboard() {
               </div>
             )}
 
-            {authRequired && (
-              adminKey ? (
-                <button
-                  onClick={handleLock}
-                  title="Lock admin actions"
-                  className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 text-green-400 rounded-xl text-sm font-medium transition-colors hover:bg-green-500/20"
-                >
-                  <Unlock className="w-4 h-4" />
-                  <span className="hidden md:inline">Admin</span>
-                </button>
+            {authRequired &&
+              (adminKey ? (
+                <ToolButton onClick={handleLock} active tone="cache" aria-label="Admin unlocked: lock admin actions" title="Lock admin actions on this browser">
+                  <Unlock className="w-4 h-4" aria-hidden />
+                  <span>Admin</span>
+                </ToolButton>
               ) : (
-                <button
-                  onClick={openAdminModal}
-                  title="Unlock admin actions with your key"
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-200 rounded-xl text-sm font-medium transition-colors"
-                >
-                  <Lock className="w-4 h-4" />
-                  <span className="hidden md:inline">Admin</span>
-                </button>
-              )
-            )}
-          </div>
+                <ToolButton onClick={openAdminModal} aria-label="Admin login" title="Unlock admin actions with your key">
+                  <Lock className="w-4 h-4" aria-hidden />
+                  <span>Admin</span>
+                </ToolButton>
+              ))}
+          </nav>
         </div>
 
-        {/* Progress bars */}
         {(ingest.running || depot.running) && (
-          <div className="max-w-7xl mx-auto px-6 pb-3 space-y-2">
+          <div className="max-w-[90rem] mx-auto px-5 pb-3 space-y-2">
             {ingest.running && (
               <ProgressBar
                 label="Ingesting logs"
                 detail={`${ingest.lines.toLocaleString()} entries · ${ingest.percent}%`}
                 percent={ingest.percent}
-                color="bg-blue-500"
               />
             )}
             {depot.running && (
@@ -400,35 +385,23 @@ export default function Dashboard() {
                   : depot.phase === "parsing" ? "Parsing mappings"
                   : "Applying mappings"
                 }
-                detail={
-                  depot.phase === "downloading"
-                    ? `${depot.percent}% · ${formatBytes(depot.speedBps)}/s`
-                    : "working…"
-                }
+                detail={depot.phase === "downloading" ? `${depot.percent}% · ${formatBytes(depot.speedBps)}/s` : "Working…"}
                 percent={depot.phase === "downloading" ? depot.percent : 100}
                 indeterminate={depot.phase !== "downloading"}
-                color="bg-purple-500"
               />
             )}
           </div>
         )}
 
-        {/* Last result toast */}
-        {!ingest.running && ingest.message && (
-          <div className="max-w-7xl mx-auto px-6 pb-2">
-            <span className={`text-[11px] ${ingest.error ? "text-rose-400" : "text-gray-500"}`}>{ingest.message}</span>
-          </div>
-        )}
-        {!depot.running && depot.message && (
-          <div className="max-w-7xl mx-auto px-6 pb-2">
-            <span className="text-[11px] text-gray-500">{depot.message}</span>
+        {((!ingest.running && ingest.message) || (!depot.running && depot.message)) && (
+          <div className="max-w-[90rem] mx-auto px-5 pb-2 flex flex-wrap gap-x-6 text-xs" role="status">
+            {!ingest.running && ingest.message && <span className={ingest.error ? "text-danger" : "text-ink-3"}>{ingest.message}</span>}
+            {!depot.running && depot.message && <span className="text-ink-3">{depot.message}</span>}
           </div>
         )}
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        {/* Time range selector (toggled from the top-bar Range button) */}
+      <main className="max-w-[90rem] mx-auto px-5 py-6 space-y-5">
         <RangePanel
           open={rangeOpen}
           selection={selection}
@@ -438,150 +411,102 @@ export default function Dashboard() {
           onAdminRejected={handleLock}
         />
 
-        {/* Cache savings hero */}
-        <CacheSavings
-          servedFromCache={data?.overview.servedFromCache || 0}
-          servedFromUpstream={data?.overview.servedFromUpstream || 0}
-        />
+        <SummaryBand overview={data?.overview} rangeLabel={rangeLabel} services={data?.services || []} />
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <StatsCard
-            title="Total Bandwidth"
-            value={formatBytes(data?.overview.totalBytesSent || 0)}
-            subtitle="Served to clients"
-            icon={HardDrive}
-            accent="blue"
-          />
-          <StatsCard
-            title="Total Requests"
-            value={formatNumber(data?.overview.totalRequests || 0)}
-            icon={Activity}
-            accent="green"
-          />
-          <StatsCard
-            title="Cache Hit Rate"
-            value={`${hitRate.toFixed(1)}%`}
-            subtitle="By bandwidth"
-            icon={Gauge}
-            accent="amber"
-          />
-          <StatsCard
-            title="Unique Clients"
-            value={String(data?.overview.totalClients || 0)}
-            icon={Users}
-            accent="purple"
-          />
-          <StatsCard
-            title="Services"
-            value={String(data?.overview.totalServices || 0)}
-            icon={Database}
-            accent="cyan"
-          />
-        </div>
-
-        {/* Live Downloads */}
+        {/* Live gets the full width: at an event this can be hundreds of clients */}
         <LiveDownloads includeAll={includeAll} />
 
-        {/* Bandwidth chart - full width */}
         <BandwidthChart data={data?.bandwidth || []} granularity={data?.bandwidthGranularity || "day"} />
 
-        {/* Services - own full-width section */}
+        <CachedGames data={gamesData} />
+
         <ServiceChart data={data?.services || []} />
 
-        {/* Recent Activity */}
-        <RecentActivity entries={recent} />
-
-        {/* Cached Games */}
-        <CachedGames />
-
-        {/* Clients Table */}
-        <ClientsTable clients={clients} />
+        <div className="grid gap-5 lg:grid-cols-12 items-start">
+          <ClientsTable clients={clients} className="lg:col-span-7" />
+          <RecentActivity entries={recent} className="lg:col-span-5" />
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-800/50 py-4 mt-8">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-          <p className="text-[11px] text-gray-600">
-            Built by{" "}
-            <a href="https://github.com/imahmud1" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors">
+      <footer className="border-t border-line mt-10">
+        <div className="max-w-[90rem] mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-3">
+          <p>
+            LanCache Dashboard by{" "}
+            <a href="https://github.com/imahmud1" target="_blank" rel="noopener noreferrer" className="text-ink-2 hover:text-ink underline-offset-4 hover:underline">
               imahmud1
             </a>
             {" · "}
-            <a href="https://github.com/imahmud1/lancache-dashboard" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors">
+            <a href="https://github.com/imahmud1/lancache-dashboard" target="_blank" rel="noopener noreferrer" className="text-ink-2 hover:text-ink underline-offset-4 hover:underline">
               Source
             </a>
           </p>
-          <p className="text-[11px] text-gray-700">MIT License</p>
+          <p>MIT License</p>
         </div>
       </footer>
 
-      {/* Rebuild confirmation */}
       {rebuildOpen && (
-        <Modal onClose={() => setRebuildOpen(false)}>
+        <Modal onClose={() => setRebuildOpen(false)} labelledBy="rebuild-title">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-5 h-5 text-red-400" />
-            </div>
+            <AlertTriangle className="w-5 h-5 text-danger shrink-0 mt-0.5" aria-hidden />
             <div>
-              <h3 className="text-base font-semibold text-white">Rebuild from log?</h3>
-              <p className="text-sm text-gray-400 mt-1.5 leading-relaxed">
-                This clears all current totals and recounts from <span className="font-mono text-gray-300">access.log</span>. It fixes
-                inflated numbers, but any history that has already rotated out of the log{" "}
-                <span className="text-red-300">can&apos;t be recovered</span>.
+              <h3 id="rebuild-title" className="text-base font-semibold text-ink">Rebuild from log?</h3>
+              <p className="text-sm text-ink-2 mt-1.5 leading-relaxed">
+                This clears all current totals and recounts from <span className="font-mono text-ink">access.log</span>. It fixes inflated numbers, but any
+                history that has already rotated out of the log <span className="text-danger">can&apos;t be recovered</span>.
               </p>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6">
             <button
               onClick={() => setRebuildOpen(false)}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-colors"
+              className="h-9 px-4 rounded-lg text-[13px] font-medium text-ink-2 bg-panel hover:text-ink border border-line hover:border-line-strong transition-colors"
             >
               Cancel
             </button>
-            <button
-              onClick={confirmRebuild}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-500 transition-colors shadow-lg shadow-red-600/20"
-            >
+            <button onClick={confirmRebuild} className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white bg-[#c93c37] hover:bg-[#da4540] transition-colors">
               Rebuild
             </button>
           </div>
         </Modal>
       )}
 
-      {/* Admin unlock */}
       {adminModalOpen && (
-        <Modal onClose={() => setAdminModalOpen(false)}>
+        <Modal onClose={() => setAdminModalOpen(false)} labelledBy="admin-title">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
-              <Lock className="w-5 h-5 text-blue-400" />
-            </div>
+            <Lock className="w-5 h-5 text-accent shrink-0 mt-0.5" aria-hidden />
             <div className="flex-1">
-              <h3 className="text-base font-semibold text-white">Admin access</h3>
-              <p className="text-sm text-gray-400 mt-1.5">Enter your admin key to unlock ingest, rebuild, and depot actions.</p>
+              <h3 id="admin-title" className="text-base font-semibold text-ink">Admin access</h3>
+              <p className="text-sm text-ink-2 mt-1.5">Enter your admin key to unlock ingest, rebuild, and depot actions on this browser.</p>
             </div>
           </div>
-          <input
-            type="password"
-            autoFocus
-            value={adminInput}
-            onChange={(e) => setAdminInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submitAdminKey()}
-            placeholder="Admin key"
-            className="mt-4 w-full px-4 py-2.5 bg-gray-950/60 border border-gray-700 rounded-xl text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/50"
-          />
-          {adminError && <p className="mt-2 text-[12px] text-rose-400">{adminError}</p>}
+          <label className="block mt-4">
+            <span className="sr-only">Admin key</span>
+            <input
+              type="password"
+              autoFocus
+              value={adminInput}
+              onChange={(e) => setAdminInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitAdminKey()}
+              placeholder="Admin key"
+              className="w-full h-10 px-3.5 bg-ground/60 border border-line rounded-lg text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
+            />
+          </label>
+          {adminError && (
+            <p className="mt-2 text-xs text-danger" role="alert">
+              {adminError}
+            </p>
+          )}
           <div className="flex justify-end gap-2 mt-5">
             <button
               onClick={() => setAdminModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 transition-colors"
+              className="h-9 px-4 rounded-lg text-[13px] font-medium text-ink-2 bg-panel hover:text-ink border border-line hover:border-line-strong transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={submitAdminKey}
               disabled={adminChecking || !adminInput.trim()}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-lg shadow-blue-600/20"
+              className="h-9 px-4 rounded-lg text-[13px] font-semibold text-ground bg-accent hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
               {adminChecking ? "Checking…" : "Unlock"}
             </button>
@@ -592,13 +517,17 @@ export default function Dashboard() {
   );
 }
 
-function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+function Modal({ children, onClose, labelledBy }: { children: ReactNode; onClose: () => void; labelledBy: string }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl shadow-black/50 p-6">
-        {children}
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+      <div className="absolute inset-0 bg-black/65" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-xl border border-line-strong bg-raised shadow-[0_24px_64px_rgba(0,0,0,0.6)] p-6">{children}</div>
     </div>
   );
 }
@@ -610,7 +539,6 @@ function MenuItem({
   onClick,
   disabled,
   danger,
-  accent = "blue",
 }: {
   icon: typeof RefreshCw;
   label: string;
@@ -618,56 +546,35 @@ function MenuItem({
   onClick: () => void;
   disabled?: boolean;
   danger?: boolean;
-  accent?: "blue" | "purple" | "amber" | "red";
 }) {
-  const chip = {
-    blue: "bg-blue-500/15 text-blue-400",
-    purple: "bg-purple-500/15 text-purple-400",
-    amber: "bg-amber-500/15 text-amber-400",
-    red: "bg-red-500/15 text-red-400",
-  }[accent];
-
   return (
     <button
+      role="menuitem"
       onClick={onClick}
       disabled={disabled}
-      className={`group w-full flex items-start gap-3 px-3 py-2 text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-        danger ? "hover:bg-red-500/10" : "hover:bg-gray-800"
+      className={`w-full flex items-start gap-3 px-3 py-2 rounded-lg text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        danger ? "hover:bg-danger/10" : "hover:bg-panel"
       }`}
     >
-      <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${chip}`}>
-        <Icon className="w-4 h-4" />
-      </span>
+      <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${danger ? "text-danger" : "text-ink-3"}`} aria-hidden />
       <span className="min-w-0">
-        <span className={`block text-sm font-medium ${danger ? "text-red-300" : "text-gray-100"}`}>{label}</span>
-        {hint && <span className="block text-[11px] text-gray-500 leading-snug">{hint}</span>}
+        <span className={`block text-[13px] font-medium ${danger ? "text-danger" : "text-ink"}`}>{label}</span>
+        {hint && <span className="block text-xs text-ink-3 leading-snug mt-0.5">{hint}</span>}
       </span>
     </button>
   );
 }
 
-function ProgressBar({
-  label,
-  detail,
-  percent,
-  color,
-  indeterminate,
-}: {
-  label: string;
-  detail?: string;
-  percent: number;
-  color: string;
-  indeterminate?: boolean;
-}) {
+function ProgressBar({ label, detail, percent, indeterminate }: { label: string; detail?: string; percent: number; indeterminate?: boolean }) {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[11px] font-medium text-gray-300">{label}</span>
-        {detail && <span className="text-[11px] text-gray-500">{detail}</span>}
+    <div role="progressbar" aria-label={label} aria-valuenow={indeterminate ? undefined : percent} aria-valuemin={0} aria-valuemax={100}>
+      <div className="flex items-center justify-between mb-1 text-xs">
+        <span className="font-medium text-ink-2">{label}</span>
+        {detail && <span className="figure text-ink-3">{detail}</span>}
       </div>
-      <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+      <div className="h-1 rounded-full bg-raised overflow-hidden">
         <div
-          className={`h-full rounded-full ${color} transition-all duration-300 ${indeterminate ? "animate-pulse w-full" : ""}`}
+          className={`h-full rounded-full bg-accent transition-[width] duration-300 ${indeterminate ? "animate-pulse w-full" : ""}`}
           style={indeterminate ? undefined : { width: `${Math.max(percent, 2)}%` }}
         />
       </div>

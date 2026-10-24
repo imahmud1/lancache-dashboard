@@ -1,21 +1,109 @@
 @import "tailwindcss";
 
-@theme {
-  --color-gray-750: #2d3748;
-  --color-gray-850: #172033;
+/*
+ * Design tokens. One dark world shared by the dashboard and the /display stage.
+ *   ground → panel → raised   surfaces, darkest to lightest
+ *   line / line-strong        hairline rules between and inside panels
+ *   ink / ink-2 / ink-3       text tiers (ink-3 still clears 4.5:1 on panel)
+ *   cache / internet          the product's two truths: served locally vs fetched upstream
+ *   accent                    interactive + live state; the event host can override it (BRAND_ACCENT)
+ */
+:root {
+  --brand-accent: #3aa4ff;
 }
 
-:root {
-  --background: #030712;
-  --foreground: #f9fafb;
+@theme inline {
+  /* Deep navy steps rather than neutral grey */
+  --color-ground: #0a0e15;
+  --color-panel: #111722;
+  --color-raised: #19212f;
+  --color-line: #222c3c;
+  --color-line-strong: #33405a;
+  --color-ink: #e9edf3;
+  --color-ink-2: #aab5c5;
+  --color-ink-3: #8090a6;
+  --color-cache: #3ddc84;
+  --color-internet: #f5a524;
+  --color-danger: #ff5c5c;
+  --color-accent: var(--brand-accent);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Condensed tabular figures for every measured number. */
+@utility figure {
+  font-family: var(--font-display);
+  font-stretch: 82%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Rows entering a live list: rise in from slightly below, already legible. */
+@keyframes row-in {
+  from {
+    opacity: 0.35;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility row-in {
+  animation: row-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Slow ambient crossfade for art backdrops. */
+@keyframes art-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+@utility art-in {
+  animation: art-in 1800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--color-ground);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-ground);
+  color: var(--color-ink);
 }
 
-/* Custom scrollbar */
+::selection {
+  background: color-mix(in srgb, var(--brand-accent) 35%, transparent);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+input,
+textarea {
+  caret-color: var(--brand-accent);
+}
+
+/* Scrollbars, themed from the line tokens. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -26,10 +114,20 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: var(--color-line-strong);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background: #3d4756;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

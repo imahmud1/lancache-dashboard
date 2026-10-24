@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Archivo } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// Variable width axis: figures are set condensed (see the `figure` utility).
+const archivo = Archivo({ subsets: ["latin"], axes: ["wdth"], variable: "--font-archivo" });
 
 export const metadata: Metadata = {
   title: "LanCache Dashboard",
@@ -15,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-gray-950 antialiased`}>{children}</body>
+    <html lang="en" className={`dark ${inter.variable} ${archivo.variable}`}>
+      <body className="font-sans bg-ground text-ink antialiased">{children}</body>
     </html>
   );
 }
