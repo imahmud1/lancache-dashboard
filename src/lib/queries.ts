@@ -1,18 +1,10 @@
 import { getDb } from "./db";
 import type { SavedRange } from "./range";
+import { getExcludedIps, isPrefixEntry } from "./ip-filter";
 
 export type { SavedRange };
-
-/**
- * IPs/prefixes to exclude from stats by default (prefill traffic from the
- * cache host itself, which is supposed to miss heavily and skews real client data).
- * Configurable via the EXCLUDE_IPS env var (comma-separated).
- * Entries ending in "." or ":" are treated as prefixes (e.g. "172." for docker).
- */
-export function getExcludedIps(): string[] {
-  const raw = process.env.EXCLUDE_IPS ?? "127.0.0.1,::1,172.,localhost";
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
-}
+// Re-exported for existing importers; the source of truth lives in ip-filter.ts.
+export { getExcludedIps };
 
 /**
  * Build a SQL filter fragment that excludes the configured IPs.
@@ -25,7 +17,7 @@ function ipExclusion(column: string, includeAll: boolean): { clause: string; par
   const conds: string[] = [];
   const params: string[] = [];
   for (const ip of ips) {
-    if (ip.endsWith(".") || ip.endsWith(":")) {
+    if (isPrefixEntry(ip)) {
       conds.push(`${column} NOT LIKE ?`);
       params.push(`${ip}%`);
     } else {
@@ -460,6 +452,15 @@ export function updateGameName(service: string, gameId: string, gameName: string
   } else {
     db.prepare(`UPDATE cached_games SET game_name = ? WHERE service = ? AND game_id = ?`).run(gameName, service, gameId);
   }
+}
+
+/** The stored image URL for a cached-game row, or null if the row doesn't exist. */
+export function getStoredImageUrl(service: string, gameId: string): string | null {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT image_url as imageUrl FROM cached_games WHERE service = ? AND game_id = ?`
+  ).get(service, gameId) as { imageUrl: string } | undefined;
+  return row ? row.imageUrl || "" : null;
 }
 
 /** Look up a resolved game name/image for a Steam depot from the cache table. */
