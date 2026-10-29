@@ -200,24 +200,28 @@ Hostnames are visible to everyone who can open the dashboard. Machine names ofte
 
 ## Security
 
-The dashboard is built for a trusted LAN, but it ships with two opt-in protections — worth enabling if anyone besides you can reach it.
+The dashboard is built for a trusted LAN. Pick **one** of these access modes:
 
-| Variable | Effect |
-|----------|--------|
-| `ADMIN_API_KEY` | Splits users into **viewers** and **admins**. Without the key, everyone can see every stat, chart, live download, and the Status Check page, but the **Manage** menu (ingest, rebuild, update depots) is hidden and saved time ranges are read-only. Enter the key once via the **Admin** button in the UI (stored in your browser). Recommended for LAN events: share the URL with every participant and keep the key to yourself. Use a long random key, e.g. `openssl rand -hex 24`. |
-| `DASHBOARD_USER` + `DASHBOARD_PASSWORD` | When both are set, the **entire** dashboard (UI + API) is behind HTTP Basic Auth — nobody sees anything without the credentials. Use this for stricter setups. Works together with `ADMIN_API_KEY`. |
+| Mode | Set | Who sees what |
+|------|-----|---------------|
+| **Public viewing + admin login** *(recommended for LAN events)* | `ADMIN_PASSWORD` | Anyone on the network opens the dashboard straight away as a viewer. The **Admin** button in the header asks for the password and unlocks management on that browser. |
+| **Private site** | `DASHBOARD_USER` + `DASHBOARD_PASSWORD` | The **entire** dashboard (pages and API) is behind a browser login prompt. Nobody sees anything without the credentials. |
+| **Open** | nothing | Anyone who can reach it can view **and** manage it. Fine for a homelab you alone can reach. |
 
-**Viewer vs Admin at a glance** (with `ADMIN_API_KEY` set):
+Use a long random password, e.g. `openssl rand -hex 24`. `ADMIN_API_KEY` is still accepted as an older name for `ADMIN_PASSWORD`. The server logs which mode it's in at startup.
+
+If you set both modes, the private-site login applies first and `ADMIN_PASSWORD` is still needed for management.
+
+**Viewer vs Admin** (public viewing mode):
 
 | | Viewer | Admin |
 |---|---|---|
 | Stats, charts, live downloads, cached games, clients, services | ✓ | ✓ |
-| Status Check, time range filter, prefill toggle | ✓ | ✓ |
+| Status Check, `/display`, time range filter, prefill toggle | ✓ | ✓ |
 | Ingest / rebuild / update depots | — | ✓ |
 | Create or delete saved time ranges | — | ✓ |
-
 Other notes:
-- Read endpoints (stats, clients, games, live) are intentionally open so the dashboard "just works" for viewers. Only mutating actions are gated by `ADMIN_API_KEY`.
+- Read endpoints (stats, clients, games, live) are intentionally open so the dashboard "just works" for viewers. Only mutating actions are gated by `ADMIN_PASSWORD`.
 - Mutating actions are also single-flight (a second trigger returns 409 while one is running), which blunts abuse.
 - Security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`) are always applied.
 - **Don't expose this directly to the internet.** Keep it on your LAN, or bind to localhost (`127.0.0.1:3000:3000` in compose) and put it behind a reverse proxy with TLS + auth if you need remote access.

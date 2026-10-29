@@ -55,7 +55,7 @@ export default function Dashboard() {
   const [adminError, setAdminError] = useState("");
   const [adminChecking, setAdminChecking] = useState(false);
 
-  // Load persisted toggle + admin key, and check whether auth is required
+  // Load persisted toggle + admin password, and check whether auth is required
   useEffect(() => {
     const savedToggle = typeof window !== "undefined" ? localStorage.getItem("includeAll") : null;
     const savedKey = typeof window !== "undefined" ? localStorage.getItem("adminKey") : null;
@@ -100,7 +100,7 @@ export default function Dashboard() {
         setAdminKey(key);
         setAdminModalOpen(false);
       } else {
-        setAdminError("That key wasn't accepted. Check it and try again.");
+        setAdminError("That password wasn't accepted. Check it and try again.");
       }
     } catch {
       setAdminError("Couldn't reach the server to validate the key.");
@@ -177,7 +177,7 @@ export default function Dashboard() {
       const res = await fetch(url, { method: "POST", headers: adminHeaders });
       if (res.status === 401) {
         handleLock();
-        alert("Admin key required or invalid. Please unlock again.");
+        alert("Admin login required or expired. Please log in again.");
         return;
       }
       // 409 = already running; fall through and poll its progress
@@ -213,7 +213,7 @@ export default function Dashboard() {
       const res = await fetch("/api/depots/refresh", { method: "POST", headers: adminHeaders });
       if (res.status === 401) {
         handleLock();
-        alert("Admin key required or invalid. Please unlock again.");
+        alert("Admin login required or expired. Please log in again.");
         return;
       }
     } catch {
@@ -355,12 +355,12 @@ export default function Dashboard() {
 
             {authRequired &&
               (adminKey ? (
-                <ToolButton onClick={handleLock} active tone="cache" aria-label="Admin unlocked: lock admin actions" title="Lock admin actions on this browser">
+                <ToolButton onClick={handleLock} active tone="cache" aria-label="Admin: log out" title="Log out of admin on this browser">
                   <Unlock className="w-4 h-4" aria-hidden />
                   <span>Admin</span>
                 </ToolButton>
               ) : (
-                <ToolButton onClick={openAdminModal} aria-label="Admin login" title="Unlock admin actions with your key">
+                <ToolButton onClick={openAdminModal} aria-label="Admin login" title="Log in to manage the dashboard">
                   <Lock className="w-4 h-4" aria-hidden />
                   <span>Admin</span>
                 </ToolButton>
@@ -475,19 +475,19 @@ export default function Dashboard() {
           <div className="flex items-start gap-3">
             <Lock className="w-5 h-5 text-accent shrink-0 mt-0.5" aria-hidden />
             <div className="flex-1">
-              <h3 id="admin-title" className="text-base font-semibold text-ink">Admin access</h3>
-              <p className="text-sm text-ink-2 mt-1.5">Enter your admin key to unlock ingest, rebuild, and depot actions on this browser.</p>
+              <h3 id="admin-title" className="text-base font-semibold text-ink">Admin login</h3>
+              <p className="text-sm text-ink-2 mt-1.5">Viewing is open to everyone. Log in to ingest, rebuild, update depots and manage saved ranges on this browser.</p>
             </div>
           </div>
           <label className="block mt-4">
-            <span className="sr-only">Admin key</span>
+            <span className="sr-only">Admin password</span>
             <input
               type="password"
               autoFocus
               value={adminInput}
               onChange={(e) => setAdminInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitAdminKey()}
-              placeholder="Admin key"
+              placeholder="Admin password"
               className="w-full h-10 px-3.5 bg-ground/60 border border-line rounded-lg text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
             />
           </label>
@@ -508,7 +508,7 @@ export default function Dashboard() {
               disabled={adminChecking || !adminInput.trim()}
               className="h-9 px-4 rounded-lg text-[13px] font-semibold text-ground bg-accent hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition"
             >
-              {adminChecking ? "Checking…" : "Unlock"}
+              {adminChecking ? "Checking…" : "Log in"}
             </button>
           </div>
         </Modal>

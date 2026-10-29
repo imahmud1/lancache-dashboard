@@ -25,9 +25,10 @@ services:
       - BRAND_NAME=
       - BRAND_TAGLINE=
       - BRAND_ACCENT=
-      # Viewer/admin split: viewing stays open, Manage actions need this key. Optional.
-      - ADMIN_API_KEY=
-      # Full-site login. Set both to require credentials for everyone.
+      # Access: pick ONE mode.
+      # Public viewing + admin login (recommended for LAN events):
+      - ADMIN_PASSWORD=
+      # Private site: set BOTH to require a login for anyone to view anything.
       - DASHBOARD_USER=
       - DASHBOARD_PASSWORD=
     volumes:

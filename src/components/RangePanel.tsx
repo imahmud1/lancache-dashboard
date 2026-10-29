@@ -80,7 +80,7 @@ export function RangePanel({ open, selection, onSelect, canAdmin, adminHeaders, 
       });
       if (res.status === 401) {
         onAdminRejected?.();
-        alert("Admin key required or invalid. Please unlock again.");
+        alert("Admin login required or expired. Please log in again.");
         return;
       }
       if (!res.ok) {
@@ -100,7 +100,7 @@ export function RangePanel({ open, selection, onSelect, canAdmin, adminHeaders, 
       const res = await fetch(`/api/ranges?id=${id}`, { method: "DELETE", headers: adminHeaders });
       if (res.status === 401) {
         onAdminRejected?.();
-        alert("Admin key required or invalid. Please unlock again.");
+        alert("Admin login required or expired. Please log in again.");
         return;
       }
       loadSaved();

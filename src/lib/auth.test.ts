@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { adminKey, isAuthRequired, checkAdmin } from "./auth";
 
 /**
@@ -11,6 +11,11 @@ import { adminKey, isAuthRequired, checkAdmin } from "./auth";
 function req(headers: Record<string, string> = {}): Request {
   return new Request("http://localhost/api/ingest", { method: "POST", headers });
 }
+
+beforeEach(() => {
+  // Isolate from any ADMIN_PASSWORD in the developer's shell or .env.
+  vi.stubEnv("ADMIN_PASSWORD", "");
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -27,6 +32,16 @@ describe("adminKey / isAuthRequired", () => {
     vi.stubEnv("ADMIN_API_KEY", "   ");
     expect(adminKey()).toBeNull();
     expect(isAuthRequired()).toBe(false);
+  });
+
+  it("prefers ADMIN_PASSWORD and still accepts ADMIN_API_KEY", () => {
+    vi.stubEnv("ADMIN_API_KEY", "legacy");
+    vi.stubEnv("ADMIN_PASSWORD", "");
+    expect(adminKey()).toBe("legacy");
+    vi.stubEnv("ADMIN_PASSWORD", "newer");
+    expect(adminKey()).toBe("newer");
+    expect(checkAdmin(req({ "x-api-key": "newer" }))).toBe(true);
+    expect(checkAdmin(req({ "x-api-key": "legacy" }))).toBe(false);
   });
 
   it("trims and reports a configured key", () => {
